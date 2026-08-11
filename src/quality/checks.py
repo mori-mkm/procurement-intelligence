@@ -100,7 +100,7 @@ def load_reference_schema(path: Path = Path("src/quality/reference_schema.json")
     """Carrega o schema de referência versionado (ADR-0008). Retorna lista vazia se não existir."""
     if not path.exists():
         return []
-    with path.open(encoding="utf-8") as f:
+    with path.open(encoding="utf-8-sig") as f:
         data = json.load(f)
     return data.get("colunas", [])
 
@@ -118,9 +118,12 @@ def schema_drift_check(df: pd.DataFrame, reference_columns: list[str]) -> dict[s
         "n_colunas_referencia": len(reference_columns),
     }
 
-def build_bronze_quality_report(df: pd.DataFrame) -> dict[str, Any]:
+def build_bronze_quality_report(df: pd.DataFrame, reference_columns: list[str] | None = None) -> dict[str, Any]:
     """Relatório completo de qualidade da Etapa 2 (Bronze validation)."""
-    return {
+    if reference_columns is None:
+        reference_columns = load_reference_schema()
+
+    relatorio = {
         "shape": basic_shape(df),
         "duplicatas_exatas": exact_duplicates(df),
         "duplicatas_id_compra_item": key_duplicates(df, "id_compra_item"),
@@ -134,6 +137,12 @@ def build_bronze_quality_report(df: pd.DataFrame) -> dict[str, Any]:
         "heterogeneidade_unidade_por_catmat": unit_heterogeneity(df, "cod_item_catalogo", "unidade_medida"),
     }
 
+    if reference_columns:
+        relatorio["schema_drift"] = schema_drift_check(df, reference_columns)
+    else:
+        relatorio["schema_drift"] = {"aviso": "schema de referência não encontrado — checagem pulada"}
+
+    return relatorio
 
 if __name__ == "__main__":
     alvo_data = date.fromisoformat(sys.argv[1]) if len(sys.argv) > 1 else date.today()
