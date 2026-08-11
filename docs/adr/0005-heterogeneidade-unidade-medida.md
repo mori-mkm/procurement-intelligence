@@ -14,6 +14,12 @@ magnitude real, em amostra de 5.000 linhas:
 - Por descrição resumida (fallback para os ~28% sem CATMAT): **14,93%**.
 - Um pequeno subconjunto de códigos concentra o problema — alguns chegam a
   5-6 unidades distintas para o mesmo código.
+  
+**Atualização (Fase 2):** medição em 4 dias completos (não amostra parcial)
+mostrou variação de 2,37% a 9,30% nos itens com múltiplas unidades — mais
+volátil do que a estimativa inicial da Fase 1 sugeria. A decisão de
+tratamento por exceção continua válida, mas o dimensionamento do esforço de
+curadoria deve considerar essa faixa, não um número fixo.
 
 ## Decisão
 Tratar a heterogeneidade de unidade como regra de exceção no Silver, não
