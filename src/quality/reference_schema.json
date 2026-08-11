@@ -1,0 +1,27 @@
+﻿{
+  "fonte": "comprasGOV-diario-VW_FT_PNCP_COMPRA_ITEM",
+  "data_referencia": "2025-12-01",
+  "observacao": "Schema de referência inicial (ADR-0008). Atualizar manualmente quando uma mudança de schema for confirmada como intencional.",
+  "colunas": [
+    "srk_pncp_item_compra", "cod_compra", "cod_item_compra", "codigo_classe",
+    "codigo_grupo", "numero_item_pncp", "numero_grupo", "numero_item_compra",
+    "descricao_detalhada", "descricao_resumida", "material_ou_servico",
+    "material_ou_servico_nome", "valor_unitario_estimado", "valor_total",
+    "quantidade", "unidade_medida", "orcamento_sigiloso",
+    "item_categoria_id_pncp", "item_categoria_nome", "patrimonio",
+    "codigo_registro_imobiliario", "criterio_julgamento_id_pncp",
+    "criterio_julgamento_nome", "situacao_compra_item",
+    "situacao_compra_item_nome", "tipo_beneficio", "tipo_beneficio_nome",
+    "incentivo_produtivo_basico", "data_inclusao_pncp",
+    "data_atualizacao_pncp", "tem_resultado", "cod_item_catalogo",
+    "ID_contratacao_PNCP", "cod_fornecedor", "nome_fornecedor",
+    "data_resultado", "valor_total_resultado", "valor_unitario_resultado",
+    "quantidade_resultado", "id_compra", "id_compra_item", "ano_compra",
+    "sequencial_compra", "orgao_entidade_cnpj",
+    "unidade_orgao_codigo_unidade", "margem_preferencia_normal",
+    "percentual_margem_preferencia_normal", "margem_preferencia_adicional",
+    "percentual_margem_preferencia_adicional", "codigo_NCM",
+    "descricao_NCM", "numero_controle_PNCP_compra", "TXT_LINK_MATERIAL",
+    "TXT_LINK_CLASSE", "TXT_LINK_SERVICO", "TXT_LINK_GRUPO"
+  ]
+}
