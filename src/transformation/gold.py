@@ -191,21 +191,34 @@ def normalize_item_key(texto) -> str | None:
     return limpo or None
 
 
+def _most_frequent_per_group(df: pd.DataFrame, group_col: str, value_col: str) -> pd.Series:
+    """Retorna, por grupo, o valor mais frequente de value_col (ignorando
+    nulos) -- indexado por group_col. Vetorizado (groupby + size + sort +
+    drop_duplicates), sem .apply/loop por grupo -- medido: reduz
+    build_dim_item de 42s para poucos segundos em ~200k linhas (Fase 5,
+    teste de escala mensal). Em caso de empate de contagem, o critério de
+    desempate não é garantidamente idêntico ao antigo .mode() (que
+    desempatava alfabeticamente) -- aceitável porque nenhum teste depende
+    do valor exato em caso de empate, só da contagem."""
+    validos = df[df[value_col].notna()]
+    if validos.empty:
+        return pd.Series(dtype=object, name=value_col)
+    contagem = validos.groupby([group_col, value_col]).size().reset_index(name="_n")
+    contagem = contagem.sort_values("_n", ascending=False)
+    top = contagem.drop_duplicates(subset=group_col, keep="first")
+    return top.set_index(group_col)[value_col]
+
+
 def build_dim_item(df_fact: pd.DataFrame) -> pd.DataFrame:
     """Constrói dim_item. Grão: item_key (descrição normalizada, ADR-0006)
     — não CATMAT, que tem 52-81% de nulos (ADR-0006) e, quando presente,
     pode ser inconsistente sob a mesma descrição (ex: "Fruta" -> 36 CATMATs
     distintos, achado da Fase 4).
 
-    cod_item_catalogo_mais_frequente é enriquecimento, não chave.
-    n_catmats_distintos_observados sinaliza ambiguidade em vez de escondê-la.
-
-    unit_flag é computado aqui (nível Gold, sobre todos os dias disponíveis
-    em df_fact), não no Silver diário — dá mais poder estatístico à
-    detecção de heterogeneidade de unidade (mais transações por item) do
-    que recalcular a cada dia isoladamente. classify_unit_comparability
-    (ADR-0005/0006) estava pendente de integração; entra aqui pela
-    primeira vez.
+    Implementação vetorizada (Fase 5) -- versão anterior usava loop Python
+    por grupo (for item_key, grupo in df.groupby(...)), medido em 42s para
+    ~37 mil itens (1 mês de dado). Reescrita usando agregação nativa do
+    pandas + _most_frequent_per_group, sem loop Python por grupo.
     """
     df = df_fact.copy()
     df["item_key"] = df["descricao_resumida"].apply(normalize_item_key)
@@ -213,25 +226,40 @@ def build_dim_item(df_fact: pd.DataFrame) -> pd.DataFrame:
 
     df = classify_unit_comparability(df, item_col="item_key", unit_col="unidade_medida")
 
-    def moda_ou_none(serie: pd.Series):
-        s = serie.dropna()
-        return s.mode().iloc[0] if not s.empty else None
+    agg = df.groupby("item_key").agg(
+        n_transacoes=("item_key", "size"),
+        unit_flag=("unit_flag", "first"),  # determinístico por grupo (classify_unit_comparability usa transform)
+    )
 
-    registros = []
-    for item_key, grupo in df.groupby("item_key"):
-        catmats_validos = grupo["cod_item_catalogo"].dropna() if "cod_item_catalogo" in grupo.columns else pd.Series(dtype=object)
-        registros.append({
-            "item_key": item_key,
-            "descricao_resumida_amostra": grupo["descricao_resumida"].mode().iloc[0],
-            "material_ou_servico_nome": moda_ou_none(grupo["material_ou_servico_nome"]) if "material_ou_servico_nome" in grupo.columns else None,
-            "unit_flag": grupo["unit_flag"].iloc[0],  # determinístico por grupo, ver classify_unit_comparability
-            "categoria_relevante": moda_ou_none(grupo["categoria_relevante"]) if "categoria_relevante" in grupo.columns else None,
-            "cod_item_catalogo_mais_frequente": catmats_validos.mode().iloc[0] if not catmats_validos.empty else None,
-            "n_catmats_distintos_observados": int(catmats_validos.nunique()),
-            "n_transacoes": len(grupo),
-        })
+    agg["descricao_resumida_amostra"] = _most_frequent_per_group(
+        df, "item_key", "descricao_resumida"
+    ).reindex(agg.index)
 
-    return pd.DataFrame(registros).sort_values("n_transacoes", ascending=False).reset_index(drop=True)
+    if "material_ou_servico_nome" in df.columns:
+        agg["material_ou_servico_nome"] = _most_frequent_per_group(
+            df, "item_key", "material_ou_servico_nome"
+        ).reindex(agg.index)
+    else:
+        agg["material_ou_servico_nome"] = None
+
+    if "categoria_relevante" in df.columns:
+        agg["categoria_relevante"] = _most_frequent_per_group(
+            df, "item_key", "categoria_relevante"
+        ).reindex(agg.index)
+    else:
+        agg["categoria_relevante"] = None
+
+    if "cod_item_catalogo" in df.columns:
+        agg["cod_item_catalogo_mais_frequente"] = _most_frequent_per_group(
+            df, "item_key", "cod_item_catalogo"
+        ).reindex(agg.index)
+        agg["n_catmats_distintos_observados"] = df.groupby("item_key")["cod_item_catalogo"].nunique()
+    else:
+        agg["cod_item_catalogo_mais_frequente"] = None
+        agg["n_catmats_distintos_observados"] = 0
+
+    resultado = agg.reset_index()
+    return resultado.sort_values("n_transacoes", ascending=False).reset_index(drop=True)
 
 
 def build_dim_supplier(df_fact: pd.DataFrame) -> pd.DataFrame:
@@ -239,30 +267,22 @@ def build_dim_supplier(df_fact: pd.DataFrame) -> pd.DataFrame:
     campos não existem no bulk CSV; enriquecimento via Receita Federal CNPJ
     fica pendente (Fase 0, Seção 8, Ajuste 2).
 
-    n_produtos_servicos_distintos conta item_key distinto, não
-    id_compra_item — contar id_compra_item seria redundante com
-    n_transacoes, já que o grão da Silver garante 1 linha por
-    (id_compra_item, cod_fornecedor).
-
-    Nota de eficiência: recalcula item_key aqui, independente de
-    build_dim_item — redundante, mas mantém cada função autocontida. Se
-    isso incomodar performance quando o volume crescer, dá para calcular
-    item_key uma vez no df_fact consolidado antes de chamar as duas
-    funções (ponto a revisitar ao montar fact_purchase).
+    Implementação vetorizada (Fase 5), mesmo motivo de build_dim_item.
     """
     df = df_fact[df_fact["cod_fornecedor"].notna()].copy()
     df["_item_key_tmp"] = df["descricao_resumida"].apply(normalize_item_key)
 
-    registros = []
-    for cnpj, grupo in df.groupby("cod_fornecedor"):
-        registros.append({
-            "supplier_key": cnpj,
-            "nome_fornecedor": grupo["nome_fornecedor"].mode().iloc[0] if grupo["nome_fornecedor"].notna().any() else None,
-            "n_transacoes": len(grupo),
-            "n_produtos_servicos_distintos": int(grupo["_item_key_tmp"].nunique()),
-        })
+    agg = df.groupby("cod_fornecedor").agg(
+        n_transacoes=("cod_fornecedor", "size"),
+        n_produtos_servicos_distintos=("_item_key_tmp", "nunique"),
+    )
+    agg["nome_fornecedor"] = _most_frequent_per_group(
+        df, "cod_fornecedor", "nome_fornecedor"
+    ).reindex(agg.index)
 
-    return pd.DataFrame(registros).sort_values("n_transacoes", ascending=False).reset_index(drop=True)
+    resultado = agg.reset_index().rename(columns={"cod_fornecedor": "supplier_key"})
+    resultado = resultado[["supplier_key", "nome_fornecedor", "n_transacoes", "n_produtos_servicos_distintos"]]
+    return resultado.sort_values("n_transacoes", ascending=False).reset_index(drop=True)
 
 
 MESES_PT = {

@@ -20,6 +20,11 @@ ID_COLUMNS = [
     "cod_fornecedor", "cod_item_catalogo", "orgao_entidade_cnpj",
     "ID_contratacao_PNCP", "numero_controle_PNCP_compra", "srk_pncp_item_compra",
     "COD_RESULTADO_ITEM",
+    # novos (dataset de cabeçalho, VW_FT_PNCP_COMPRA)
+    "orgao_subrogado_cnpj", "codigo_orgao",
+    "unidade_orgao_codigo_unidade", "unidade_orgao_codigo_ibge",
+    "unidade_subrogada_codigo_unidade", "unidade_subrogada_codigo_ibge",
+    "numero_controle_PNCP", "codigo_modalidade", "codigo_modo_disputa",
 ]
 
 def load_bronze_csv(path: Path) -> pd.DataFrame:

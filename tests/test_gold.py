@@ -13,6 +13,7 @@ from src.transformation.gold import (
     build_dim_date,
     build_fact_purchase,
     validate_fact_purchase_grain,
+    _most_frequent_per_group
 )
 
 
@@ -300,3 +301,22 @@ def test_validate_fact_purchase_grain_detects_unexpected_violation():
     resultado = validate_fact_purchase_grain(df)
     assert resultado["n_grupos_violacao_nao_flagados"] == 1
     assert resultado["grao_valido_considerando_flags"] is False
+
+
+def test_most_frequent_per_group_picks_higher_count():
+    df = pd.DataFrame({
+        "grupo": ["a", "a", "a", "b"],
+        "valor": ["x", "x", "y", "z"],
+    })
+    resultado = _most_frequent_per_group(df, "grupo", "valor")
+    assert resultado["a"] == "x"
+    assert resultado["b"] == "z"
+
+
+def test_most_frequent_per_group_ignores_nulls():
+    df = pd.DataFrame({
+        "grupo": ["a", "a"],
+        "valor": [None, "x"],
+    })
+    resultado = _most_frequent_per_group(df, "grupo", "valor")
+    assert resultado["a"] == "x"

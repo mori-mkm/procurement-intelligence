@@ -17,12 +17,12 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import duckdb
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-
-import duckdb
+from src.quality.checks import ID_COLUMNS as ID_COLUMNS_ITEM
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
@@ -47,6 +47,19 @@ ID_COLUMNS_COMPRA = [
     "unidade_subrogada_codigo_unidade", "unidade_subrogada_codigo_ibge",
     "numero_controle_PNCP", "cod_compra",
 ]
+
+def _default_id_columns_for(dataset: str) -> list[str]:
+    """Resolve a lista de colunas de ID (VARCHAR forçado) por dataset.
+    Sem isso, o DuckDB infere tipo automaticamente e corrompe zero à
+    esquerda -- mesmo bug já corrigido em checks.py (dataset item) e em
+    ID_COLUMNS_COMPRA (dataset cabeçalho). Faltava aplicar a mesma proteção
+    ao ingerir o dataset ITEM em escala anual -- corrigido antes de rodar
+    a primeira ingestão anual de item (Fase 4/5)."""
+    if dataset == DATASET_COMPRA:
+        return ID_COLUMNS_COMPRA
+    if dataset == DATASET_ITEM:
+        return ID_COLUMNS_ITEM
+    return []
 
 BRONZE_ANNUAL_ROOT = Path("data/bronze")
 MANIFEST_PATH = Path("data/bronze") / "_manifest" / "ingestion_annual_log.jsonl"
@@ -74,7 +87,12 @@ def local_parquet_path(ano: int, dataset: str) -> Path:
 
 
 def _build_types_clause(columns: list[str]) -> str:
-    pares = ", ".join(f"'{c}': 'VARCHAR'" for c in columns)
+    # dict.fromkeys preserva ordem e remove duplicata -- proteção contra
+    # listas de ID_COLUMNS com entrada repetida (já aconteceu uma vez,
+    # ver checks.py), que quebra o map literal do DuckDB silenciosamente
+    # até rodar (erro só aparece na execução, não na importação).
+    colunas_unicas = list(dict.fromkeys(columns))
+    pares = ", ".join(f"'{c}': 'VARCHAR'" for c in colunas_unicas)
     return "{" + pares + "}"
 
 
@@ -106,7 +124,7 @@ def download_annual_via_duckdb(
         return record
 
     if id_columns is None:
-        id_columns = ID_COLUMNS_COMPRA if dataset == DATASET_COMPRA else []
+        id_columns = _default_id_columns_for(dataset)
 
     caminho.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect()
