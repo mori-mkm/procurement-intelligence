@@ -114,6 +114,46 @@ def unit_heterogeneity(df: pd.DataFrame, item_col: str, unit_col: str) -> dict[s
         "pct_itens_com_multiplas_unidades": round(100 * n_multi / len(contagem), 2),
     }
 
+def list_multi_unit_items(
+    df: pd.DataFrame,
+    item_col: str = "descricao_resumida",
+    unit_col: str = "unidade_medida",
+    catmat_col: str = "cod_item_catalogo",
+    top_n: int = 30,
+) -> list[dict]:
+    """Lista itens com mais de uma unidade de medida observada, ordenados por
+    volume de transações (não alfabeticamente) — para priorizar curadoria de
+    conversão pelo que representa mais spend, não pelo que aparece primeiro.
+
+    n_catmats_distintos ajuda a diferenciar: múltiplas unidades + único
+    CATMAT sugere mesmo produto em embalagens diferentes (candidato real a
+    conversão); múltiplas unidades + múltiplos CATMATs sugere produtos
+    diferentes disfarçados de item único pela descrição genérica (problema
+    de normalização de texto, não de unidade).
+
+    Não decide nada — só lista para inspeção manual, conforme ADR-0005.
+    """
+    if item_col not in df.columns or unit_col not in df.columns:
+        return []
+
+    resultado = []
+    for nome_item, grupo in df.groupby(item_col):
+        unidades = grupo[unit_col].dropna().unique()
+        if len(unidades) > 1:
+            entrada = {
+                "item": nome_item,
+                "n_transacoes": len(grupo),
+                "n_unidades_distintas": len(unidades),
+                "unidades": sorted(str(u) for u in unidades),
+                "n_catmats_distintos": (
+                    int(grupo[catmat_col].nunique()) if catmat_col in grupo.columns else None
+                ),
+            }
+            resultado.append(entrada)
+
+    resultado.sort(key=lambda x: x["n_transacoes"], reverse=True)
+    return resultado[:top_n]
+
 def load_reference_schema(path: Path = Path("src/quality/reference_schema.json")) -> list[str]:
     """Carrega o schema de referência versionado (ADR-0008). Retorna lista vazia se não existir."""
     if not path.exists():

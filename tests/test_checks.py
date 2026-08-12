@@ -82,3 +82,16 @@ def test_load_bronze_csv_preserves_id_leading_zeros(tmp_path):
     )
     df = load_bronze_csv(csv_path)
     assert df["cod_fornecedor"].iloc[0] == "00123456000199"
+
+def test_list_multi_unit_items_sorts_by_transaction_volume():
+    from src.quality.checks import list_multi_unit_items
+
+    df = pd.DataFrame({
+        "descricao_resumida": ["A", "A", "A", "B", "B", "C"],
+        "unidade_medida": ["UN", "CX", "UN", "KG", "L", "UN"],
+        "cod_item_catalogo": [None, None, None, None, None, None],
+    })
+    resultado = list_multi_unit_items(df, top_n=10)
+    assert len(resultado) == 2  # A e B têm múltiplas unidades; C não
+    assert resultado[0]["item"] == "A"
+    assert resultado[0]["n_transacoes"] == 3
