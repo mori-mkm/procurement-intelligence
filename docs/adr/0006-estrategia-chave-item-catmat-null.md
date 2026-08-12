@@ -54,3 +54,18 @@ ponto só representar o comportamento real da fonte.
   lugar de uma faixa:** rejeitada — a variação real (52-81%) é grande
   demais para um ponto médio representar o comportamento da fonte sem
   enganar quem ler a documentação depois.
+
+## Nota adicional: fragmentação de item_key por erro tipográfico na fonte (Fase 4)
+
+Identificamos que erros de digitação na fonte (palavras coladas, ex:
+"complementar desaude" vs "complementar de saude") fragmentam o que deveria
+ser o mesmo item em duas entradas de item_key. Caso confirmado: 630
+transações combinadas, contadas como 2 itens antes da correção.
+
+Decisão: lista curada de correções pontuais (CORRECOES_TIPOGRAFICAS_CONHECIDAS,
+em src/transformation/gold.py), aplicada apenas à construção de item_key,
+nunca ao campo descricao_resumida observado. Cada entrada exige confirmação
+manual em dado real -- rejeitamos fuzzy-match/similaridade automática por
+risco de fundir itens genuinamente diferentes (ex: variações de tamanho,
+modelo). Lista deve crescer incrementalmente conforme novos casos forem
+identificados, não de uma vez por suposição.

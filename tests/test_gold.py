@@ -1,11 +1,16 @@
+from datetime import date
 import pandas as pd
 
 from src.transformation.gold import (
-    build_dim_buyer, 
-    validate_dim_buyer_grain, 
+    build_dim_buyer,
+    validate_dim_buyer_grain,
     join_fact_with_buyer,
     load_dim_buyer_from_annual,
     resolve_duplicate_buyer_records,
+    normalize_item_key,
+    build_dim_item,
+    build_dim_supplier,
+    build_dim_date,
 )
 
 
@@ -20,6 +25,10 @@ def make_cabecalho_df():
         "modalidade_nome": ["Dispensa", "Pregão - Eletrônico"],
     })
 
+
+# ---------------------------------------------------------------------------
+# dim_buyer (diário)
+# ---------------------------------------------------------------------------
 
 def test_build_dim_buyer_selects_expected_columns():
     dim_buyer = build_dim_buyer(make_cabecalho_df())
@@ -80,6 +89,10 @@ def test_join_fact_with_buyer_handles_missing_match():
     assert pd.isna(resultado.loc[resultado["id_compra"] == "999", "unidade_orgao_uf_sigla"].iloc[0])
     assert resultado.loc[resultado["id_compra"] == "1", "unidade_orgao_uf_sigla"].iloc[0] == "RJ"
 
+
+# ---------------------------------------------------------------------------
+# dim_buyer (anual, multi-ano)
+# ---------------------------------------------------------------------------
 
 def test_load_dim_buyer_from_annual_raises_if_missing(tmp_path, monkeypatch):
     import src.ingestion.pncp_bulk_annual as annual_module
@@ -148,3 +161,81 @@ def test_load_dim_buyer_from_annual_deduplicates_across_years(tmp_path, monkeypa
 
     dim_buyer = load_dim_buyer_from_annual([2024, 2025])
     assert len(dim_buyer) == 1  # deduplicado, não 2
+
+
+# ---------------------------------------------------------------------------
+# dim_item
+# ---------------------------------------------------------------------------
+
+def test_normalize_item_key_lowercases_and_strips_accents():
+    assert normalize_item_key("Cadeira Escritório") == "cadeira escritorio"
+
+
+def test_normalize_item_key_collapses_whitespace():
+    assert normalize_item_key("  Arroz   Beneficiado  ") == "arroz beneficiado"
+
+
+def test_normalize_item_key_handles_null():
+    assert normalize_item_key(None) is None
+
+
+def test_build_dim_item_merges_case_and_accent_variants():
+    df = pd.DataFrame({
+        "descricao_resumida": ["Cadeira Escritório", "cadeira escritorio", "Mesa"],
+        "cod_item_catalogo": [None, "123", None],
+        "material_ou_servico_nome": ["Material", "Material", "Material"],
+        "unidade_medida": ["Unidade", "Unidade", "Unidade"],
+        "categoria_relevante": ["Mobiliario / Material de Escritorio", "Mobiliario / Material de Escritorio", None],
+    })
+    dim_item = build_dim_item(df)
+    assert len(dim_item) == 2
+    linha_cadeira = dim_item[dim_item["item_key"] == "cadeira escritorio"]
+    assert linha_cadeira["n_transacoes"].iloc[0] == 2
+    assert linha_cadeira["cod_item_catalogo_mais_frequente"].iloc[0] == "123"
+
+
+def test_build_dim_item_flags_multiple_catmats_without_hiding():
+    df = pd.DataFrame({
+        "descricao_resumida": ["Fruta", "Fruta", "Fruta"],
+        "cod_item_catalogo": ["100", "200", "300"],
+        "material_ou_servico_nome": ["Material"] * 3,
+        "unidade_medida": ["Quilograma"] * 3,
+        "categoria_relevante": [None] * 3,
+    })
+    dim_item = build_dim_item(df)
+    assert dim_item["n_catmats_distintos_observados"].iloc[0] == 3
+
+
+# ---------------------------------------------------------------------------
+# dim_supplier
+# ---------------------------------------------------------------------------
+
+def test_build_dim_supplier_counts_distinct_products_not_transactions():
+    df = pd.DataFrame({
+        "cod_fornecedor": ["123", "123", "123", "456"],
+        "nome_fornecedor": ["Empresa A", "Empresa A", "Empresa A", "Empresa B"],
+        "descricao_resumida": ["Notebook", "Notebook", "Mouse", "Cadeira"],
+    })
+    dim_supplier = build_dim_supplier(df)
+    linha_a = dim_supplier[dim_supplier["supplier_key"] == "123"]
+    assert linha_a["n_transacoes"].iloc[0] == 3
+    assert linha_a["n_produtos_servicos_distintos"].iloc[0] == 2  # Notebook, Mouse
+
+
+# ---------------------------------------------------------------------------
+# dim_date
+# ---------------------------------------------------------------------------
+
+def test_build_dim_date_covers_range():
+    dim_date = build_dim_date(date(2024, 1, 1), date(2024, 1, 3))
+    assert len(dim_date) == 3
+    assert dim_date["date_key"].iloc[0] == 20240101
+    assert dim_date["ano"].iloc[0] == 2024
+    assert dim_date["trimestre"].iloc[0] == 1
+    assert dim_date["nome_mes"].iloc[0] == "Janeiro"
+
+
+def test_normalize_item_key_applies_known_typo_correction():
+    a = normalize_item_key("Assistência médica complementar desaúde")
+    b = normalize_item_key("Assistência médica complementar de saúde")
+    assert a == b
