@@ -1,5 +1,5 @@
-"""
-Ingestão de arquivos bulk diários do PNCP/compras.gov.br.
+﻿"""
+Ingestão do arquivo bulk diário do PNCP/compras.gov.br.
 Suporta múltiplos datasets: VW_FT_PNCP_COMPRA_ITEM (item, default) e
 VW_FT_PNCP_COMPRA (cabeçalho da compra — UF, modalidade, razão social).
 
@@ -25,8 +25,6 @@ BASE_BULK = "https://repositorio.dados.gov.br/seges/comprasgov"
 DATASET_ITEM = "VW_FT_PNCP_COMPRA_ITEM"
 DATASET_COMPRA = "VW_FT_PNCP_COMPRA"
 
-# Nome da pasta local por dataset -- explícito, não derivado por string
-# manipulation, pra evitar erro silencioso se o nome do dataset mudar.
 _FOLDER_BY_DATASET = {
     DATASET_ITEM: "pncp_compra_item",
     DATASET_COMPRA: "pncp_compra",
@@ -41,7 +39,7 @@ class IngestionRecord:
     dataset: str
     data_referencia: str
     url: str
-    status: str  # "success" | "not_found" | "error" | "skipped_existing"
+    status: str
     caminho_local: Optional[str]
     tamanho_bytes: Optional[int]
     n_linhas: Optional[int]
@@ -81,7 +79,7 @@ def already_ingested(data_referencia: date, dataset: str = DATASET_ITEM) -> bool
         return False
     tamanho_local = caminho.stat().st_size
     for reg in reversed(read_manifest()):
-        dataset_do_registro = reg.get("dataset", DATASET_ITEM)  # registros antigos (pré-multi-dataset) eram todos item
+        dataset_do_registro = reg.get("dataset", DATASET_ITEM)
         if dataset_do_registro == dataset and reg["data_referencia"] == alvo and reg["status"] == "success":
             if reg.get("tamanho_bytes") == tamanho_local:
                 return True
@@ -95,7 +93,7 @@ def already_ingested(data_referencia: date, dataset: str = DATASET_ITEM) -> bool
 
 def count_lines(path: Path) -> int:
     with path.open("r", encoding="utf-8", errors="replace") as f:
-        return sum(1 for _ in f) - 1  # exclui cabeçalho
+        return sum(1 for _ in f) - 1
 
 
 def download_bulk_csv(

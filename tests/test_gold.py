@@ -1,0 +1,150 @@
+import pandas as pd
+
+from src.transformation.gold import (
+    build_dim_buyer, 
+    validate_dim_buyer_grain, 
+    join_fact_with_buyer,
+    load_dim_buyer_from_annual,
+    resolve_duplicate_buyer_records,
+)
+
+
+def make_cabecalho_df():
+    return pd.DataFrame({
+        "id_compra": ["1", "2"],
+        "orgao_entidade_cnpj": ["00394502000144", "12345678000199"],
+        "orgao_entidade_razao_social": ["COMANDO DA MARINHA", "OUTRO ORGAO"],
+        "unidade_orgao_uf_sigla": ["RJ", "SP"],
+        "unidade_orgao_municipio_nome": ["Rio de Janeiro", "Sao Paulo"],
+        "codigo_modalidade": [8, 6],
+        "modalidade_nome": ["Dispensa", "Pregão - Eletrônico"],
+    })
+
+
+def test_build_dim_buyer_selects_expected_columns():
+    dim_buyer = build_dim_buyer(make_cabecalho_df())
+    assert list(dim_buyer.columns) == [
+        "id_compra", "orgao_entidade_cnpj", "orgao_entidade_razao_social",
+        "unidade_orgao_uf_sigla", "unidade_orgao_municipio_nome",
+        "codigo_modalidade", "modalidade_nome",
+    ]
+
+
+def test_build_dim_buyer_raises_on_missing_column():
+    df_incompleto = make_cabecalho_df().drop(columns=["modalidade_nome"])
+    try:
+        build_dim_buyer(df_incompleto)
+        assert False, "deveria ter levantado ValueError"
+    except ValueError as e:
+        assert "modalidade_nome" in str(e)
+
+
+def test_validate_dim_buyer_grain_detects_unique():
+    dim_buyer = build_dim_buyer(make_cabecalho_df())
+    resultado = validate_dim_buyer_grain(dim_buyer)
+    assert resultado["grao_valido"] is True
+    assert resultado["id_compra_duplicado"] == 0
+
+
+def test_validate_dim_buyer_grain_detects_duplicate():
+    df_dup = pd.concat([make_cabecalho_df(), make_cabecalho_df().iloc[[0]]], ignore_index=True)
+    dim_buyer = build_dim_buyer(df_dup)
+    resultado = validate_dim_buyer_grain(dim_buyer)
+    assert resultado["grao_valido"] is False
+    assert resultado["id_compra_duplicado"] == 1
+
+
+def test_join_fact_with_buyer_preserves_row_count():
+    dim_buyer = build_dim_buyer(make_cabecalho_df())
+    df_fact = pd.DataFrame({
+        "id_compra_item": ["a1", "a2", "b1"],
+        "id_compra": ["1", "1", "2"],
+        "valor_total_resultado": [100.0, 200.0, 300.0],
+    })
+    resultado, stats = join_fact_with_buyer(df_fact, dim_buyer)
+    assert len(resultado) == 3
+    assert stats["linhas_sem_match_no_buyer"] == 0
+    assert resultado.loc[resultado["id_compra"] == "1", "unidade_orgao_uf_sigla"].iloc[0] == "RJ"
+
+
+def test_join_fact_with_buyer_handles_missing_match():
+    dim_buyer = build_dim_buyer(make_cabecalho_df())
+    df_fact = pd.DataFrame({
+        "id_compra_item": ["x1", "y1"],
+        "id_compra": ["999", "1"],  # "999" não existe em dim_buyer, "1" existe
+        "orgao_entidade_cnpj": ["12312312312312", "00394502000144"],  # já vem do item, nunca é nulo
+        "valor_total_resultado": [50.0, 60.0],
+    })
+    resultado, stats = join_fact_with_buyer(df_fact, dim_buyer)
+    assert stats["linhas_sem_match_no_buyer"] == 1  # só "999" deveria contar
+    assert pd.isna(resultado.loc[resultado["id_compra"] == "999", "unidade_orgao_uf_sigla"].iloc[0])
+    assert resultado.loc[resultado["id_compra"] == "1", "unidade_orgao_uf_sigla"].iloc[0] == "RJ"
+
+
+def test_load_dim_buyer_from_annual_raises_if_missing(tmp_path, monkeypatch):
+    import src.ingestion.pncp_bulk_annual as annual_module
+    monkeypatch.setattr(annual_module, "BRONZE_ANNUAL_ROOT", tmp_path)
+    try:
+        load_dim_buyer_from_annual([2099])
+        assert False, "deveria ter levantado FileNotFoundError"
+    except FileNotFoundError:
+        pass
+
+
+def test_load_dim_buyer_from_annual_reads_and_builds(tmp_path, monkeypatch):
+    import src.ingestion.pncp_bulk_annual as annual_module
+    monkeypatch.setattr(annual_module, "BRONZE_ANNUAL_ROOT", tmp_path)
+
+    caminho = annual_module.local_parquet_path(2025, annual_module.DATASET_COMPRA)
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({
+        "id_compra": ["1"],
+        "data_publicacao_pncp": ["2025-01-01"],
+        "orgao_entidade_cnpj": ["00394502000144"],
+        "orgao_entidade_razao_social": ["COMANDO DA MARINHA"],
+        "unidade_orgao_uf_sigla": ["RJ"],
+        "unidade_orgao_municipio_nome": ["Rio de Janeiro"],
+        "codigo_modalidade": [8],
+        "modalidade_nome": ["Dispensa"],
+    }).to_parquet(caminho)
+
+    dim_buyer = load_dim_buyer_from_annual([2025])
+    assert len(dim_buyer) == 1
+    assert dim_buyer["id_compra"].iloc[0] == "1"
+
+
+def test_resolve_duplicate_buyer_records_keeps_most_recent():
+    df = pd.DataFrame({
+        "id_compra": ["1", "1", "2"],
+        "data_publicacao_pncp": pd.to_datetime(["2024-05-07", "2024-06-06", "2025-01-01"]),
+        "orgao_entidade_razao_social": ["A", "A", "B"],
+    })
+    resultado, stats = resolve_duplicate_buyer_records(df)
+    assert len(resultado) == 2
+    assert stats["duplicatas_removidas"] == 1
+    linha_1 = resultado[resultado["id_compra"] == "1"]
+    assert linha_1["data_publicacao_pncp"].iloc[0] == pd.Timestamp("2024-06-06")
+
+
+def test_load_dim_buyer_from_annual_deduplicates_across_years(tmp_path, monkeypatch):
+    import src.ingestion.pncp_bulk_annual as annual_module
+    monkeypatch.setattr(annual_module, "BRONZE_ANNUAL_ROOT", tmp_path)
+
+    base_cols = {
+        "orgao_entidade_cnpj": ["00394502000144"],
+        "orgao_entidade_razao_social": ["COMANDO DA MARINHA"],
+        "unidade_orgao_uf_sigla": ["RJ"],
+        "unidade_orgao_municipio_nome": ["Rio de Janeiro"],
+        "codigo_modalidade": [8],
+        "modalidade_nome": ["Dispensa"],
+    }
+    caminho_2024 = annual_module.local_parquet_path(2024, annual_module.DATASET_COMPRA)
+    caminho_2024.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"id_compra": ["1"], "data_publicacao_pncp": ["2024-12-20"], **base_cols}).to_parquet(caminho_2024)
+
+    caminho_2025 = annual_module.local_parquet_path(2025, annual_module.DATASET_COMPRA)
+    caminho_2025.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"id_compra": ["1"], "data_publicacao_pncp": ["2025-01-05"], **base_cols}).to_parquet(caminho_2025)
+
+    dim_buyer = load_dim_buyer_from_annual([2024, 2025])
+    assert len(dim_buyer) == 1  # deduplicado, não 2
