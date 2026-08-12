@@ -286,3 +286,105 @@ def build_dim_date(data_inicio, data_fim) -> pd.DataFrame:
         "dia_semana": datas.dayofweek,
         "nome_mes": datas.month.map(MESES_PT),
     })
+
+
+def build_fact_purchase(
+    df_item_silver: pd.DataFrame, dim_buyer: pd.DataFrame, dim_item: pd.DataFrame
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Monta fact_purchase final (Fase 4): une Silver de item com dim_buyer
+    (join_fact_with_buyer) e dim_item (item_key -> unit_flag,
+    cod_item_catalogo_mais_frequente -- calculados uma única vez em
+    build_dim_item, não recomputados aqui, para não criar duas fontes de
+    verdade divergentes para o mesmo item).
+
+    Filtra itens sem resultado homologado (valor_unitario_resultado nulo)
+    ANTES de montar o fato -- ~57% do Silver combinado (Fase 4, achado real)
+    são itens ainda em andamento (tem_resultado=False), sem preço/quantidade/
+    data de resultado. fact_purchase representa transações realizadas; itens
+    em andamento continuam disponíveis no Silver, só não entram no fato.
+
+    Grão: (purchase_item_id, supplier_key) -- ADR-0004. Exceções conhecidas
+    e flagadas (resultado_conflitante=True, ADR-0010) podem violar esse
+    grão intencionalmente; qualquer violação NÃO flagada é inesperada
+    (ver validate_fact_purchase_grain).
+
+    Usa valor_unitario_resultado/valor_total_resultado/quantidade_resultado
+    (preço efetivamente homologado), não os campos _estimado (estimativa
+    pré-licitação) -- distinção já estabelecida no ADR-0010.
+
+    real_unit_price fica None -- deflação por IPCA é pendência documentada
+    desde a Fase 0, ainda não implementada.
+    """
+    if "descricao_resumida" not in df_item_silver.columns:
+        raise ValueError("df_item_silver precisa ter descricao_resumida para calcular item_key")
+
+    n_antes_filtro = len(df_item_silver)
+    df_item_silver = df_item_silver[df_item_silver["valor_unitario_resultado"].notna()].copy()
+    n_excluidos_sem_resultado = n_antes_filtro - len(df_item_silver)
+
+    df = df_item_silver.copy()
+    df["item_key"] = df["descricao_resumida"].apply(normalize_item_key)
+
+    df_com_buyer, stats_join_buyer = join_fact_with_buyer(df, dim_buyer)
+
+    colunas_dim_item = ["item_key", "unit_flag", "cod_item_catalogo_mais_frequente"]
+    colunas_disponiveis = [c for c in colunas_dim_item if c in dim_item.columns]
+    df_final = df_com_buyer.merge(dim_item[colunas_disponiveis], on="item_key", how="left")
+
+    date_key_str = pd.to_datetime(df_final["data_resultado"], errors="coerce").dt.strftime("%Y%m%d")
+    df_final["date_key"] = pd.to_numeric(date_key_str, errors="coerce").astype("Int64")
+
+    fact = pd.DataFrame({
+        "purchase_item_id": df_final["id_compra_item"],
+        "supplier_key": df_final["cod_fornecedor"],
+        "item_key": df_final["item_key"],
+        "buyer_key": df_final.get("orgao_entidade_cnpj"),
+        "unidade_orgao_uf_sigla": df_final.get("unidade_orgao_uf_sigla"),
+        "modalidade_nome": df_final.get("modalidade_nome"),
+        "date_key": df_final["date_key"],
+        "quantity": df_final.get("quantidade_resultado"),
+        "unit_price": df_final.get("valor_unitario_resultado"),
+        "total_price": df_final.get("valor_total_resultado"),
+        "real_unit_price": pd.NA,  # pendente: deflação IPCA (Fase 0)
+        "categoria_relevante": df_final.get("categoria_relevante"),
+        "unit_flag": df_final.get("unit_flag"),
+        "resultado_conflitante": df_final.get("resultado_conflitante"),
+        "cod_item_catalogo_mais_frequente": df_final.get("cod_item_catalogo_mais_frequente"),
+    })
+
+    stats = {
+        "n_linhas": len(fact),
+        "join_buyer": stats_join_buyer,
+        "n_excluidos_sem_resultado_homologado": n_excluidos_sem_resultado,
+        "n_sem_item_key": int(fact["item_key"].isna().sum()),
+        "n_sem_date_key": int(fact["date_key"].isna().sum()),
+    }
+    return fact, stats
+
+
+def validate_fact_purchase_grain(df_fact: pd.DataFrame) -> dict[str, Any]:
+    """Valida grão (purchase_item_id, supplier_key) -- ADR-0004. Separa
+    violações ESPERADAS (já flagadas resultado_conflitante=True, ADR-0010)
+    de violações INESPERADAS -- essas últimas merecem investigação, não
+    devem simplesmente ser toleradas."""
+    chave = ["purchase_item_id", "supplier_key"]
+    duplicado_mask = df_fact.duplicated(subset=chave, keep=False)
+    n_violacoes_totais = int(df_fact.duplicated(subset=chave, keep="first").sum())
+
+    if "resultado_conflitante" in df_fact.columns and duplicado_mask.any():
+        grupos_nao_flagados = (
+            df_fact[duplicado_mask]
+            .groupby(chave)["resultado_conflitante"]
+            .apply(lambda s: not s.any())
+        )
+        n_grupos_inesperados = int(grupos_nao_flagados.sum())
+    else:
+        n_grupos_inesperados = 0
+
+    return {
+        "grao": chave,
+        "n_linhas": len(df_fact),
+        "n_violacoes_totais": n_violacoes_totais,
+        "n_grupos_violacao_nao_flagados": n_grupos_inesperados,
+        "grao_valido_considerando_flags": n_grupos_inesperados == 0,
+    }

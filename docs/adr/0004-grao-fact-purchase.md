@@ -48,3 +48,13 @@ O percentual real de multiplicidade legítima (caso 1) é, portanto, menor que
   homologado):** rejeitada — perde o sinal de dispersão de preço entre
   fornecedores, que é justamente o que o Módulo de Price Intelligence
   precisa capturar.
+
+## Nota adicional: cod_fornecedor pode ser CPF, não só CNPJ (Fase 4)
+
+fact_purchase revelou casos onde cod_fornecedor tem 11 dígitos (formato
+CPF, pessoa física) em vez de 14 (CNPJ, pessoa jurídica) -- observado em
+contratos de fornecimento de água por carro-pipa (PI), plausivelmente
+Sistema de Registro de Preços com múltiplos fornecedores pessoa física
+cadastrados ao mesmo preço-teto. Relevante para qualquer enriquecimento
+futuro via Receita Federal (que cobre CNPJ, não CPF) -- dim_supplier
+precisará tratar os dois formatos distintamente quando essa fase chegar.

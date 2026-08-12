@@ -11,6 +11,8 @@ from src.transformation.gold import (
     build_dim_item,
     build_dim_supplier,
     build_dim_date,
+    build_fact_purchase,
+    validate_fact_purchase_grain,
 )
 
 
@@ -239,3 +241,62 @@ def test_normalize_item_key_applies_known_typo_correction():
     a = normalize_item_key("Assistência médica complementar desaúde")
     b = normalize_item_key("Assistência médica complementar de saúde")
     assert a == b
+
+
+# ---------------------------------------------------------------------------
+# fact_purchase
+# ---------------------------------------------------------------------------
+
+def make_dim_item_df():
+    return pd.DataFrame({
+        "item_key": ["notebook", "mouse"],
+        "unit_flag": ["unit_comparable", "unit_comparable"],
+        "cod_item_catalogo_mais_frequente": ["123", None],
+    })
+
+
+def test_build_fact_purchase_assembles_expected_columns():
+    dim_buyer = build_dim_buyer(make_cabecalho_df())
+    dim_item = make_dim_item_df()
+    df_item = pd.DataFrame({
+        "id_compra_item": ["a1", "a2"],
+        "id_compra": ["1", "2"],
+        "cod_fornecedor": ["10", "20"],
+        "descricao_resumida": ["Notebook", "Mouse"],
+        "data_resultado": pd.to_datetime(["2026-05-22", "2026-05-23"]),
+        "quantidade_resultado": [1.0, 2.0],
+        "valor_unitario_resultado": [3000.0, 50.0],
+        "valor_total_resultado": [3000.0, 100.0],
+        "categoria_relevante": ["TI / Informatica", None],
+        "resultado_conflitante": [False, False],
+    })
+    fact, stats = build_fact_purchase(df_item, dim_buyer, dim_item)
+    assert len(fact) == 2
+    linha_a1 = fact[fact["purchase_item_id"] == "a1"]
+    assert linha_a1["unit_flag"].iloc[0] == "unit_comparable"
+    assert linha_a1["date_key"].iloc[0] == 20260522
+    assert linha_a1["buyer_key"].iloc[0] == "00394502000144"
+    assert linha_a1["unidade_orgao_uf_sigla"].iloc[0] == "RJ"
+
+
+def test_validate_fact_purchase_grain_allows_flagged_violations():
+    df = pd.DataFrame({
+        "purchase_item_id": ["a1", "a1", "b1"],
+        "supplier_key": ["10", "10", "20"],
+        "resultado_conflitante": [True, True, False],
+    })
+    resultado = validate_fact_purchase_grain(df)
+    assert resultado["n_violacoes_totais"] == 1
+    assert resultado["n_grupos_violacao_nao_flagados"] == 0
+    assert resultado["grao_valido_considerando_flags"] is True
+
+
+def test_validate_fact_purchase_grain_detects_unexpected_violation():
+    df = pd.DataFrame({
+        "purchase_item_id": ["a1", "a1"],
+        "supplier_key": ["10", "10"],
+        "resultado_conflitante": [False, False],
+    })
+    resultado = validate_fact_purchase_grain(df)
+    assert resultado["n_grupos_violacao_nao_flagados"] == 1
+    assert resultado["grao_valido_considerando_flags"] is False
