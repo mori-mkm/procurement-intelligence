@@ -42,3 +42,26 @@ unica:
   Price Benchmarking, onde o conflito nao atrapalha.
 - **Escolher automaticamente um dos dois valores (ex: menor)**: rejeitada
   -- nao ha evidencia de qual valor esta correto; seria inventar resposta.
+
+  ## Nota adicional: achados da investigacao de spend_total (nao formalizados)
+
+Durante a validacao do spend_total de 22/05/2026 (R$ 2,34 bi, 61,4% concentrado
+nos top 10 registros -- concentracao esperada, compativel com Curva ABC
+prevista na Fase 0), dois padroes secundarios apareceram e ficam registrados
+para investigacao futura, sem virar decisao de arquitetura ainda:
+
+1. **descricao_resumida com texto duplicado/concatenado**: pelo menos um
+   registro do dia tinha dois itens de texto colados no mesmo campo (ex:
+   "Arroz Beneficiado ... KIT CESTA BASICA Especificacao: ..."). Mesmo padrao
+   ja visto antes ("Molho De Mesa Molho De Mesa", "Prestacao de Servico de
+   Jardinagem ... Prestacao de Servico de Jardinagem"). Nao medido em volume
+   ainda -- se recorrente, pode exigir limpeza no Silver antes de usar
+   descricao_resumida como chave (impacta ADR-0006 e ADR-0009).
+
+2. **valor_unitario_resultado == valor_total_resultado quando
+   quantidade_resultado == 1**: comum em servicos/obras/licenciamento
+   (contrato inteiro tratado como "1 unidade"). Isso significa que
+   "preco unitario" nao e comparavel entre bens fisicos e servicos por
+   contrato -- Price Intelligence (Fase 8) vai precisar segmentar por
+   material_ou_servico_nome antes de qualquer benchmarking, nao so por
+   categoria de item.
