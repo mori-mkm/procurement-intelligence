@@ -12,10 +12,28 @@ from typing import Any
 
 import pandas as pd
 
+# Campos de identificador com risco real de corrupção por inferência numérica
+# automática: CNPJ (zero à esquerda) e chaves longas tipo surrogate key
+# (perda de precisão em float64 acima de ~15-17 dígitos significativos).
+ID_COLUMNS = [
+    "id_compra", "id_compra_item", "cod_compra", "cod_item_compra",
+    "cod_fornecedor", "cod_item_catalogo", "orgao_entidade_cnpj",
+    "ID_contratacao_PNCP", "numero_controle_PNCP_compra", "srk_pncp_item_compra",
+    "COD_RESULTADO_ITEM",
+]
 
 def load_bronze_csv(path: Path) -> pd.DataFrame:
-    """Lê o CSV bruto de Bronze exatamente como está, sem tipagem forçada."""
-    return pd.read_csv(path, sep=",", encoding="utf-8", low_memory=False)
+    """Lê o CSV bruto de Bronze exatamente como está.
+
+    IDs/códigos (ID_COLUMNS) são forçados como string na leitura — sem isso,
+    o pandas infere alguns como float64, o que corrompe CNPJ com zero à
+    esquerda e arrisca perda de precisão em chaves longas. A correção
+    precisa acontecer aqui, na leitura: depois de virar float, a
+    representação original já foi perdida.
+    """
+    cabecalho = pd.read_csv(path, sep=",", encoding="utf-8", nrows=0)
+    dtype_overrides = {col: str for col in ID_COLUMNS if col in cabecalho.columns}
+    return pd.read_csv(path, sep=",", encoding="utf-8", low_memory=False, dtype=dtype_overrides)
 
 
 def basic_shape(df: pd.DataFrame) -> dict[str, Any]:

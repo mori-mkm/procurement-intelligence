@@ -70,3 +70,15 @@ def test_schema_drift_check_no_drift():
     assert result["schema_bate"] is True
     assert result["colunas_novas"] == []
     assert result["colunas_ausentes"] == []
+
+def test_load_bronze_csv_preserves_id_leading_zeros(tmp_path):
+    from src.quality.checks import load_bronze_csv
+
+    csv_path = tmp_path / "sample.csv"
+    csv_path.write_text(
+        "id_compra_item,cod_fornecedor,valor_unitario_resultado\n"
+        "1,00123456000199,10.5\n",
+        encoding="utf-8",
+    )
+    df = load_bronze_csv(csv_path)
+    assert df["cod_fornecedor"].iloc[0] == "00123456000199"
