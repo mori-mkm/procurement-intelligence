@@ -6,8 +6,11 @@ from src.transformation.silver import (
     resolve_temporal_revisions,
     suppliers_per_item_distribution,
     validate_composite_key,
+    parse_unit_canonical, 
+    classify_unit_comparability,
+    classify_relevant_category, 
+    summarize_relevant_categories,
 )
-
 
 def make_sample_df():
     return pd.DataFrame({
@@ -86,3 +89,73 @@ def test_resolve_temporal_revisions_leaves_same_date_conflicts_untouched():
     df_resolvido, stats = resolve_temporal_revisions(df)
     assert len(df_resolvido) == 2
     assert stats["revisoes_temporais_resolvidas"] == 0
+
+
+def test_parse_unit_canonical_extracts_embedded_quantity():
+    assert parse_unit_canonical("EMBALAGEM 500,00 G") == ("PESO", 500.0)
+    assert parse_unit_canonical("CAIXA 1,00 L") == ("VOLUME", 1000.0)
+
+
+def test_parse_unit_canonical_handles_bare_words():
+    assert parse_unit_canonical("QUILOGRAMA") == ("PESO", 1000.0)
+    assert parse_unit_canonical("UNIDADE") == ("CONTAGEM", None)
+
+
+def test_parse_unit_canonical_returns_none_for_unrecognized():
+    assert parse_unit_canonical("ALGO ESTRANHO XYZ") is None
+
+
+def test_classify_unit_comparability_same_dimension():
+    df = pd.DataFrame({
+        "descricao_resumida": ["A", "A", "A"],
+        "unidade_medida": ["GRAMA", "QUILOGRAMA", "EMBALAGEM 500,00 G"],
+    })
+    resultado = classify_unit_comparability(df)
+    assert (resultado["unit_flag"] == "unit_requires_conversion").all()
+
+
+def test_classify_unit_comparability_cross_dimension_is_unknown():
+    df = pd.DataFrame({
+        "descricao_resumida": ["B", "B"],
+        "unidade_medida": ["QUILOGRAMA", "UNIDADE"],
+    })
+    resultado = classify_unit_comparability(df)
+    assert (resultado["unit_flag"] == "unit_unknown").all()
+
+
+def test_classify_unit_comparability_single_unit_is_comparable():
+    df = pd.DataFrame({
+        "descricao_resumida": ["C", "C", "C"],
+        "unidade_medida": ["UNIDADE", "UNIDADE", "UNIDADE"],
+    })
+    resultado = classify_unit_comparability(df)
+    assert (resultado["unit_flag"] == "unit_comparable").all()
+
+def test_classify_relevant_category_matches_known_term():
+    df = pd.DataFrame({"descricao_resumida": ["Notebook Dell", "Fruta", "Serviço de Consultoria"]})
+    resultado = classify_relevant_category(df)
+    assert resultado.loc[0, "categoria_relevante"] == "TI / Informatica"
+    assert resultado.loc[1, "categoria_relevante"] is None
+    assert resultado.loc[2, "categoria_relevante"] == "Consultoria / Servicos Profissionais"
+
+
+def test_classify_relevant_category_handles_accents():
+    df = pd.DataFrame({"descricao_resumida": ["Cadeira Escritório", "Serviço de Limpeza"]})
+    resultado = classify_relevant_category(df)
+    assert resultado.loc[0, "categoria_relevante"] == "Mobiliario / Material de Escritorio"
+    assert resultado.loc[1, "categoria_relevante"] == "Limpeza / Facilities"
+
+
+def test_classify_relevant_category_avoids_ambiguous_substring():
+    # "servidor" sozinho nao deve capturar "servidor publico" como TI
+    df = pd.DataFrame({"descricao_resumida": ["Curso de Capacitação para Servidor Público"]})
+    resultado = classify_relevant_category(df)
+    assert resultado.loc[0, "categoria_relevante"] is None
+
+
+def test_summarize_relevant_categories():
+    df = pd.DataFrame({"descricao_resumida": ["Notebook", "Fruta", "Notebook", "Consultoria"]})
+    df = classify_relevant_category(df)
+    resumo = summarize_relevant_categories(df)
+    assert resumo["n_categorizado"] == 3
+    assert resumo["por_categoria"]["TI / Informatica"] == 2

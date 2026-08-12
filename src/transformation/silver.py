@@ -9,7 +9,10 @@ import json
 import sys
 from datetime import date
 from typing import Any
+import re
+import unicodedata
 
+import numpy as np
 import pandas as pd
 
 from src.ingestion.pncp_bulk import local_path_for
@@ -30,6 +33,199 @@ COLUNAS_DATA = ["data_inclusao_pncp", "data_atualizacao_pncp", "data_resultado"]
 
 CHAVE_COMPOSTA = ["id_compra_item", "cod_fornecedor"]
 
+# Curadoria de categorias relevantes para procurement corporativo (ADR-0009).
+# Validado em 2 dias de amostra + arquivo anual 2025 completo via DuckDB:
+# ~2.3-2.6% do volume, consistente nas tres medicoes (108.534 de 4.736.611
+# registros em 2025). Lista viva -- corrigida uma vez por falso positivo
+# (termos ambiguos como "monitor"/"servidor"/"rede" isolados) e uma vez por
+# falso negativo (acentuacao). Ver ADR-0009 para o historico completo.
+CATEGORIAS_RELEVANTES = {
+    "TI / Informatica": [
+        "computador", "notebook", "software", "licenciamento de uso",
+        "servidor de rede", "impressora", "monitor computador",
+        "monitor de video", "storage", "firewall", "antivirus", "roteador",
+    ],
+    "Telecom": ["telefonia", "link dedicado", "dados moveis", "central telefonica"],
+    "Consultoria / Servicos Profissionais": [
+        "consultoria", "auditoria", "assessoria juridica", "advocaticio",
+    ],
+    "Seguranca / Vigilancia": [
+        "vigilancia patrimonial", "seguranca patrimonial",
+        "monitoramento eletronico", "cftv", "sistema de alarme",
+    ],
+    "Limpeza / Facilities": [
+        "servico de limpeza", "conservacao predial", "jardinagem",
+        "dedetizacao", "manutencao predial",
+    ],
+    "Mobiliario / Material de Escritorio": [
+        "mobiliario", "cadeira escritorio", "mesa escritorio",
+        "papel a4", "material de escritorio",
+    ],
+    "Locacao de Veiculos": [
+        "locacao de veiculo", "locacao veicular", "aluguel de veiculo",
+        "locacao de frota",
+    ],
+    "Marketing / Publicidade": ["publicidade", "propaganda", "material grafico"],
+}
+
+
+def _strip_accents(texto) -> str:
+    if pd.isna(texto):
+        return ""
+    nfkd = unicodedata.normalize("NFKD", str(texto))
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
+def _compile_category_pattern(palavras: list[str]) -> re.Pattern:
+    escapadas = [re.escape(p) for p in palavras]
+    return re.compile(r"\b(?:" + "|".join(escapadas) + r")\b", flags=re.IGNORECASE)
+
+
+def classify_relevant_category(
+    df: pd.DataFrame,
+    desc_col: str = "descricao_resumida",
+    categorias: dict[str, list[str]] = CATEGORIAS_RELEVANTES,
+) -> pd.DataFrame:
+    """Classifica cada linha por categoria de produto/servico relevante para
+    procurement corporativo (ADR-0009), sem remover nenhuma linha.
+
+    Mesmo padrao de unit_flag (ADR-0005/0006): nao filtra, so anota. Quem
+    consumir o Silver decide se usa is_categoria_relevante para recortar.
+
+    Adiciona:
+    - categoria_relevante: nome da primeira categoria cujo padrao bateu
+      (ordem de CATEGORIAS_RELEVANTES), ou None se nenhuma bateu.
+    - is_categoria_relevante: bool, True se categoria_relevante nao e None.
+    """
+    df = df.copy()
+    desc_sem_acento = df[desc_col].apply(_strip_accents)
+
+    categoria_atribuida = pd.Series([None] * len(df), index=df.index, dtype="object")
+    ainda_sem_categoria = pd.Series(True, index=df.index)
+
+    for nome_categoria, palavras in categorias.items():
+        padrao = _compile_category_pattern(palavras)
+        mask = ainda_sem_categoria & desc_sem_acento.str.contains(padrao)
+        categoria_atribuida.loc[mask] = nome_categoria
+        ainda_sem_categoria = ainda_sem_categoria & ~mask
+
+    df["categoria_relevante"] = categoria_atribuida
+    df["is_categoria_relevante"] = df["categoria_relevante"].notna()
+    return df
+
+
+def summarize_relevant_categories(df: pd.DataFrame) -> dict[str, Any]:
+    """Distribuicao de categoria_relevante -- diagnostico de cobertura."""
+    total = len(df)
+    contagem = df["categoria_relevante"].value_counts(dropna=True)
+    return {
+        "total_linhas": total,
+        "n_categorizado": int(df["is_categoria_relevante"].sum()),
+        "pct_categorizado": round(100 * df["is_categoria_relevante"].mean(), 2),
+        "por_categoria": {k: int(v) for k, v in contagem.items()},
+    }
+
+def normalize_unit_text(unit) -> str | None:
+    """Normaliza formatação de unidade_medida: remove espaços extras
+    (líder/fim/duplicados internos) e padroniza caixa. NÃO interpreta
+    conteúdo — não unifica abreviações como UN/UNIDADE, isso é decisão
+    semântica separada. Só remove ruído de formatação que faz o mesmo
+    valor parecer heterogêneo (ex: 'Unidade' vs 'Unidade  ')."""
+    if pd.isna(unit):
+        return unit
+    texto = re.sub(r"\s+", " ", str(unit).strip())
+    return texto.upper()
+
+_BARE_UNIT_MAP = {
+    "QUILOGRAMA": ("PESO", 1000.0),
+    "GRAMA": ("PESO", 1.0),
+    "LITRO": ("VOLUME", 1000.0),
+    "MILILITRO": ("VOLUME", 1.0),
+    "METRO": ("COMPRIMENTO", 1.0),
+    "UNIDADE": ("CONTAGEM", None),
+    "UN": ("CONTAGEM", None),
+}
+
+_QTY_UNIT_PATTERN = re.compile(r"(\d+(?:,\d+)?)\s*(KG|GR|ML|L|G)\b")
+
+_UNIT_TO_DIMENSAO = {
+    "KG": ("PESO", 1000.0),
+    "GR": ("PESO", 1.0),
+    "G": ("PESO", 1.0),
+    "ML": ("VOLUME", 1.0),
+    "L": ("VOLUME", 1000.0),
+}
+
+
+def parse_unit_canonical(unit_text) -> tuple[str, float | None] | None:
+    """Extrai (dimensão física, valor canônico) de um texto de unidade,
+    quando o número já vem embutido no texto (ex: 'EMBALAGEM 500,00 G').
+
+    Dimensões: PESO (canonizado em gramas), VOLUME (canonizado em ML),
+    CONTAGEM (sem grandeza física — 'unidade' não tem peso/volume fixo,
+    por isso valor canônico é None). Retorna None se não for parseável —
+    nesse caso o item cai em unit_unknown, nunca em conversão arriscada.
+    """
+    if pd.isna(unit_text):
+        return None
+    texto = str(unit_text).strip().upper()
+
+    match = _QTY_UNIT_PATTERN.search(texto)
+    if match:
+        qty_str, codigo = match.groups()
+        qty = float(qty_str.replace(",", "."))
+        dimensao, fator = _UNIT_TO_DIMENSAO[codigo]
+        return dimensao, qty * fator
+
+    if texto in _BARE_UNIT_MAP:
+        return _BARE_UNIT_MAP[texto]
+
+    return None
+
+
+def classify_unit_comparability(
+    df: pd.DataFrame, item_col: str = "descricao_resumida", unit_col: str = "unidade_medida"
+) -> pd.DataFrame:
+    """Classifica cada linha conforme ADR-0005/0006, sem remover nada:
+
+    - unit_comparable: item tem uma única unidade observada.
+    - unit_requires_conversion: múltiplas unidades, mas todas na mesma
+      dimensão física com valor canônico extraível (conversão mecânica,
+      via parse_unit_canonical — não é curadoria manual).
+    - unit_unknown: dimensões incompatíveis (ex: PESO vs CONTAGEM) ou
+      unidade não reconhecida pelo parser. Inclui, por ora, o caso
+      UN/UNIDADE (mesma dimensão CONTAGEM, mas sem valor canônico — fica
+      pendente até termos uma etapa própria de normalização de abreviação).
+    """
+    df = df.copy()
+    df[unit_col] = df[unit_col].apply(normalize_unit_text)
+
+    parsed = df[unit_col].apply(parse_unit_canonical)
+    df["_dimensao_fisica"] = parsed.apply(lambda x: x[0] if x else None)
+
+    n_unidades_por_item = df.groupby(item_col)[unit_col].transform("nunique")
+    n_dimensoes_por_item = df.groupby(item_col)["_dimensao_fisica"].transform("nunique")
+    tem_nao_parseavel = df.groupby(item_col)["_dimensao_fisica"].transform(lambda s: s.isna().any())
+
+    condicoes = [
+        n_unidades_por_item <= 1,
+        (n_dimensoes_por_item == 1) & (~tem_nao_parseavel),
+    ]
+    escolhas = ["unit_comparable", "unit_requires_conversion"]
+    df["unit_flag"] = np.select(condicoes, escolhas, default="unit_unknown")
+
+    return df.drop(columns=["_dimensao_fisica"])
+
+
+def summarize_unit_flags(df: pd.DataFrame) -> dict[str, Any]:
+    """Distribuição das três flags — diagnóstico de quanto o parser
+    resolveu automaticamente vs. quanto ficou sem solução."""
+    contagem = df["unit_flag"].value_counts()
+    total = len(df)
+    return {
+        flag: {"n": int(contagem.get(flag, 0)), "pct": round(100 * contagem.get(flag, 0) / total, 2)}
+        for flag in ["unit_comparable", "unit_requires_conversion", "unit_unknown"]
+    }
 
 def apply_typing(df: pd.DataFrame) -> pd.DataFrame:
     """Tipagem explícita de valores monetários, quantidades e datas.
@@ -204,10 +400,12 @@ def build_silver_transformation_report(df_bronze: pd.DataFrame) -> tuple[dict[st
     df_tipado = apply_typing(df_bronze)
     df_dedup, stats_dedup = remove_exact_duplicates(df_tipado)
     df_resolvido, stats_resolucao = resolve_temporal_revisions(df_dedup)
+    df_categorizado = classify_relevant_category(df_resolvido)
 
-    dist_fornecedores = suppliers_per_item_distribution(df_resolvido)
-    validacao_chave = validate_composite_key(df_resolvido)
-    caracterizacao_violacoes = characterize_key_violations(df_resolvido)
+    dist_fornecedores = suppliers_per_item_distribution(df_categorizado)
+    validacao_chave = validate_composite_key(df_categorizado)
+    caracterizacao_violacoes = characterize_key_violations(df_categorizado)
+    resumo_categorias = summarize_relevant_categories(df_categorizado)
 
     relatorio = {
         "deduplicacao": stats_dedup,
@@ -215,8 +413,9 @@ def build_silver_transformation_report(df_bronze: pd.DataFrame) -> tuple[dict[st
         "distribuicao_fornecedores_por_item": dist_fornecedores,
         "validacao_chave_composta": validacao_chave,
         "caracterizacao_violacoes": caracterizacao_violacoes,
+        "categorias_relevantes": resumo_categorias,
     }
-    return relatorio, df_resolvido
+    return relatorio, df_categorizado
 
 
 if __name__ == "__main__":
