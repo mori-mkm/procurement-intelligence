@@ -4,7 +4,12 @@ Fase 4. Ver docs/adr/ para decisões de grão, chaves e limitações conhecidas.
 """
 from __future__ import annotations
 
+import json
 import re
+import time
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -15,7 +20,6 @@ import pandas as pd
 # futuro, gold.py quebra. Candidato a promover para função pública
 # compartilhada quando mexermos em silver.py de novo.
 from src.transformation.silver import classify_unit_comparability, _strip_accents
-
 
 # Campos do cabeçalho (VW_FT_PNCP_COMPRA) que compõem dim_buyer.
 # orgao_subrogado_* NÃO é usado: investigação (Fase 4) mostrou que, nos
@@ -408,3 +412,98 @@ def validate_fact_purchase_grain(df_fact: pd.DataFrame) -> dict[str, Any]:
         "n_grupos_violacao_nao_flagados": n_grupos_inesperados,
         "grao_valido_considerando_flags": n_grupos_inesperados == 0,
     }
+
+
+GOLD_ROOT = Path("data/gold")
+
+
+@dataclass
+class GoldBuildRecord:
+    data_construcao_utc: str
+    n_linhas_fact: int
+    n_dim_buyer: int
+    n_dim_item: int
+    n_dim_supplier: int
+    n_dim_date: int
+    tempo_total_segundos: float
+    caminho_gold_root: str
+
+
+def save_gold_layer(
+    dim_buyer: pd.DataFrame,
+    dim_item: pd.DataFrame,
+    dim_supplier: pd.DataFrame,
+    dim_date: pd.DataFrame,
+    fact: pd.DataFrame,
+    gold_root: Path | None = None,
+) -> dict[str, Any]:
+    """Persiste as 4 dimensões + fact_purchase como Parquet.
+
+    Sobrescreve qualquer versão anterior -- Gold não é incremental nesta
+    versão, é sempre reconstruído do zero a partir do Silver/Bronze
+    disponível (mais simples, sem risco de dado obsoleto silencioso).
+
+    Registra estatísticas em <gold_root>/_manifest/gold_build_log.jsonl,
+    mesmo padrão de rastreabilidade de ingestion_log.jsonl /
+    ingestion_annual_log.jsonl -- útil especificamente para acompanhar
+    tempo de build conforme o volume de dado crescer.
+    """
+    if gold_root is None:
+        gold_root = GOLD_ROOT
+    gold_root = Path(gold_root)
+
+    t0 = time.time()
+    gold_root.mkdir(parents=True, exist_ok=True)
+
+    tabelas = {
+        "dim_buyer": dim_buyer,
+        "dim_item": dim_item,
+        "dim_supplier": dim_supplier,
+        "dim_date": dim_date,
+        "fact_purchase": fact,
+    }
+    for nome, df in tabelas.items():
+        df.to_parquet(gold_root / f"{nome}.parquet", index=False)
+
+    tempo_total = time.time() - t0
+
+    record = GoldBuildRecord(
+        data_construcao_utc=datetime.now(timezone.utc).isoformat(),
+        n_linhas_fact=len(fact),
+        n_dim_buyer=len(dim_buyer),
+        n_dim_item=len(dim_item),
+        n_dim_supplier=len(dim_supplier),
+        n_dim_date=len(dim_date),
+        tempo_total_segundos=round(tempo_total, 2),
+        caminho_gold_root=str(gold_root),
+    )
+
+    manifest_path = gold_root / "_manifest" / "gold_build_log.jsonl"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    with manifest_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(asdict(record), ensure_ascii=False) + "\n")
+
+    return asdict(record)
+
+
+def load_gold_layer(gold_root: Path | None = None) -> dict[str, pd.DataFrame]:
+    """Carrega as 4 dimensões + fact_purchase já persistidas.
+
+    Levanta FileNotFoundError se alguma tabela estiver ausente -- não
+    tenta reconstruir automaticamente, para não mascarar Gold parcialmente
+    construído ou desatualizado."""
+    if gold_root is None:
+        gold_root = GOLD_ROOT
+    gold_root = Path(gold_root)
+
+    nomes = ["dim_buyer", "dim_item", "dim_supplier", "dim_date", "fact_purchase"]
+    resultado = {}
+    for nome in nomes:
+        caminho = gold_root / f"{nome}.parquet"
+        if not caminho.exists():
+            raise FileNotFoundError(
+                f"Tabela Gold '{nome}' não encontrada em {caminho}. "
+                f"Rode save_gold_layer(...) primeiro."
+            )
+        resultado[nome] = pd.read_parquet(caminho)
+    return resultado

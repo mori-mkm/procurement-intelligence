@@ -13,7 +13,9 @@ from src.transformation.gold import (
     build_dim_date,
     build_fact_purchase,
     validate_fact_purchase_grain,
-    _most_frequent_per_group
+    _most_frequent_per_group,
+    save_gold_layer, 
+    load_gold_layer
 )
 
 
@@ -320,3 +322,44 @@ def test_most_frequent_per_group_ignores_nulls():
     })
     resultado = _most_frequent_per_group(df, "grupo", "valor")
     assert resultado["a"] == "x"
+
+
+# ---------------------------------------------------------------------------
+# persistência do Gold
+# ---------------------------------------------------------------------------
+
+def make_minimal_gold_tables():
+    dim_buyer = pd.DataFrame({"id_compra": ["1"], "orgao_entidade_cnpj": ["123"]})
+    dim_item = pd.DataFrame({"item_key": ["notebook"], "n_transacoes": [1]})
+    dim_supplier = pd.DataFrame({"supplier_key": ["10"], "n_transacoes": [1]})
+    dim_date = pd.DataFrame({"date_key": [20250101], "ano": [2025]})
+    fact = pd.DataFrame({"purchase_item_id": ["a1"], "supplier_key": ["10"]})
+    return dim_buyer, dim_item, dim_supplier, dim_date, fact
+
+
+def test_save_gold_layer_writes_parquet_files(tmp_path):
+    dim_buyer, dim_item, dim_supplier, dim_date, fact = make_minimal_gold_tables()
+    stats = save_gold_layer(dim_buyer, dim_item, dim_supplier, dim_date, fact, gold_root=tmp_path)
+
+    assert (tmp_path / "dim_buyer.parquet").exists()
+    assert (tmp_path / "fact_purchase.parquet").exists()
+    assert stats["n_linhas_fact"] == 1
+    assert (tmp_path / "_manifest" / "gold_build_log.jsonl").exists()
+
+
+def test_load_gold_layer_roundtrip(tmp_path):
+    dim_buyer, dim_item, dim_supplier, dim_date, fact = make_minimal_gold_tables()
+    save_gold_layer(dim_buyer, dim_item, dim_supplier, dim_date, fact, gold_root=tmp_path)
+
+    carregado = load_gold_layer(gold_root=tmp_path)
+    assert set(carregado.keys()) == {"dim_buyer", "dim_item", "dim_supplier", "dim_date", "fact_purchase"}
+    assert len(carregado["fact_purchase"]) == 1
+    assert carregado["dim_buyer"]["id_compra"].iloc[0] == "1"
+
+
+def test_load_gold_layer_raises_if_missing(tmp_path):
+    try:
+        load_gold_layer(gold_root=tmp_path)
+        assert False, "deveria ter levantado FileNotFoundError"
+    except FileNotFoundError:
+        pass
