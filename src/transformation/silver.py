@@ -125,6 +125,57 @@ def summarize_relevant_categories(df: pd.DataFrame) -> dict[str, Any]:
         "por_categoria": {k: int(v) for k, v in contagem.items()},
     }
 
+def flag_conflicting_results(
+    df: pd.DataFrame,
+    key_cols: list[str] = CHAVE_COMPOSTA,
+    date_col: str = "data_resultado",
+    value_col: str = "valor_unitario_resultado",
+) -> pd.DataFrame:
+    """Marca linhas cujo grupo da chave composta tem mesma data_resultado mas
+    valor divergente (ADR-0010, caso RIO NEGRO) — reprocessamento em lote na
+    fonte que gerou dois registros de resultado homologado para o mesmo
+    item/fornecedor, sem cancelar o anterior. Nenhuma linha e removida.
+
+    Uso recomendado por consumidor:
+    - Spend Analytics (soma de valor): EXCLUIR (ver compute_spend_total) —
+      senao conta o mesmo gasto duas vezes.
+    - Price Benchmarking (dispersao/preco esperado): MANTER — mais um ponto
+      de preco observado nao prejudica a analise.
+    """
+    df = df.copy()
+    faltando = [c for c in key_cols + [date_col, value_col] if c not in df.columns]
+    if faltando:
+        df["resultado_conflitante"] = False
+        return df
+
+    n_datas = df.groupby(key_cols)[date_col].transform("nunique")
+    n_valores = df.groupby(key_cols)[value_col].transform("nunique")
+    df["resultado_conflitante"] = (n_datas == 1) & (n_valores > 1)
+    return df
+
+def compute_spend_total(
+    df: pd.DataFrame,
+    value_col: str = "valor_total_resultado",
+    conflitante_col: str = "resultado_conflitante",
+) -> dict[str, Any]:
+    """Spend total para uso em Spend Analytics — exclui linhas
+    resultado_conflitante=True para evitar contagem dupla (ADR-0010)."""
+    if conflitante_col not in df.columns:
+        return {"erro": f"coluna '{conflitante_col}' nao encontrada — rode flag_conflicting_results antes"}
+
+    total_bruto = df[value_col].sum()
+    df_limpo = df[~df[conflitante_col]]
+    total_liquido = df_limpo[value_col].sum()
+    n_excluidas = int(df[conflitante_col].sum())
+
+    return {
+        "spend_total_bruto": round(float(total_bruto), 2),
+        "spend_total_liquido_sem_conflitos": round(float(total_liquido), 2),
+        "valor_excluido_por_conflito": round(float(total_bruto - total_liquido), 2),
+        "n_linhas_excluidas": n_excluidas,
+        "pct_linhas_excluidas": round(100 * n_excluidas / len(df), 4) if len(df) else 0.0,
+    }
+
 def normalize_unit_text(unit) -> str | None:
     """Normaliza formatação de unidade_medida: remove espaços extras
     (líder/fim/duplicados internos) e padroniza caixa. NÃO interpreta
@@ -401,11 +452,13 @@ def build_silver_transformation_report(df_bronze: pd.DataFrame) -> tuple[dict[st
     df_dedup, stats_dedup = remove_exact_duplicates(df_tipado)
     df_resolvido, stats_resolucao = resolve_temporal_revisions(df_dedup)
     df_categorizado = classify_relevant_category(df_resolvido)
+    df_final = flag_conflicting_results(df_categorizado)
 
-    dist_fornecedores = suppliers_per_item_distribution(df_categorizado)
-    validacao_chave = validate_composite_key(df_categorizado)
-    caracterizacao_violacoes = characterize_key_violations(df_categorizado)
-    resumo_categorias = summarize_relevant_categories(df_categorizado)
+    dist_fornecedores = suppliers_per_item_distribution(df_final)
+    validacao_chave = validate_composite_key(df_final)
+    caracterizacao_violacoes = characterize_key_violations(df_final)
+    resumo_categorias = summarize_relevant_categories(df_final)
+    resumo_spend = compute_spend_total(df_final)
 
     relatorio = {
         "deduplicacao": stats_dedup,
@@ -414,8 +467,13 @@ def build_silver_transformation_report(df_bronze: pd.DataFrame) -> tuple[dict[st
         "validacao_chave_composta": validacao_chave,
         "caracterizacao_violacoes": caracterizacao_violacoes,
         "categorias_relevantes": resumo_categorias,
+        "resultado_conflitante": {
+            "n_linhas_flagadas": int(df_final["resultado_conflitante"].sum()),
+            "pct_linhas_flagadas": round(100 * df_final["resultado_conflitante"].mean(), 4),
+        },
+        "spend_total": resumo_spend,
     }
-    return relatorio, df_categorizado
+    return relatorio, df_final
 
 
 if __name__ == "__main__":

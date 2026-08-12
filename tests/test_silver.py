@@ -10,6 +10,8 @@ from src.transformation.silver import (
     classify_unit_comparability,
     classify_relevant_category, 
     summarize_relevant_categories,
+    flag_conflicting_results, 
+    compute_spend_total,
 )
 
 def make_sample_df():
@@ -159,3 +161,43 @@ def test_summarize_relevant_categories():
     resumo = summarize_relevant_categories(df)
     assert resumo["n_categorizado"] == 3
     assert resumo["por_categoria"]["TI / Informatica"] == 2
+
+def test_flag_conflicting_results_detects_same_date_diff_value():
+    df = pd.DataFrame({
+        "id_compra_item": ["1", "1", "2"],
+        "cod_fornecedor": ["10", "10", "20"],
+        "data_resultado": pd.to_datetime(["2026-05-22", "2026-05-22", "2026-05-22"]),
+        "valor_unitario_resultado": [4.0, 4.2, 9.0],
+        "valor_total_resultado": [6600.0, 6930.0, 100.0],
+    })
+    resultado = flag_conflicting_results(df)
+    assert resultado.loc[0, "resultado_conflitante"] is True or resultado.loc[0, "resultado_conflitante"] == True
+    assert resultado.loc[1, "resultado_conflitante"] == True
+    assert resultado.loc[2, "resultado_conflitante"] == False
+
+
+def test_flag_conflicting_results_ignores_diff_date_groups():
+    df = pd.DataFrame({
+        "id_compra_item": ["1", "1"],
+        "cod_fornecedor": ["10", "10"],
+        "data_resultado": pd.to_datetime(["2026-05-20", "2026-05-22"]),
+        "valor_unitario_resultado": [4.0, 4.2],
+        "valor_total_resultado": [100.0, 105.0],
+    })
+    resultado = flag_conflicting_results(df)
+    assert not resultado["resultado_conflitante"].any()
+
+
+def test_compute_spend_total_excludes_conflicting_rows():
+    df = pd.DataFrame({
+        "id_compra_item": ["1", "1", "2"],
+        "cod_fornecedor": ["10", "10", "20"],
+        "data_resultado": pd.to_datetime(["2026-05-22", "2026-05-22", "2026-05-22"]),
+        "valor_unitario_resultado": [4.0, 4.2, 9.0],
+        "valor_total_resultado": [6600.0, 6930.0, 100.0],
+    })
+    df = flag_conflicting_results(df)
+    resultado = compute_spend_total(df)
+    assert resultado["spend_total_bruto"] == 13630.0
+    assert resultado["spend_total_liquido_sem_conflitos"] == 100.0
+    assert resultado["n_linhas_excluidas"] == 2
