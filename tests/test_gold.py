@@ -15,7 +15,8 @@ from src.transformation.gold import (
     validate_fact_purchase_grain,
     _most_frequent_per_group,
     save_gold_layer, 
-    load_gold_layer
+    load_gold_layer,
+    flag_value_outliers,
 )
 
 
@@ -363,3 +364,57 @@ def test_load_gold_layer_raises_if_missing(tmp_path):
         assert False, "deveria ter levantado FileNotFoundError"
     except FileNotFoundError:
         pass
+
+
+def test_flag_value_outliers_detects_extreme_quantity():
+    df = pd.DataFrame({
+        "item_key": ["notebook"] * 11,
+        "unit_price": [2000.0] * 11,
+        "quantity": [10, 12, 8, 11, 9, 10, 13, 9, 11, 10, 6264000],
+    })
+    resultado = flag_value_outliers(df, item_col="item_key")
+    assert resultado["is_value_outlier"].iloc[-1] == True
+    assert resultado["is_value_outlier"].iloc[:-1].sum() == 0
+    assert resultado["outlier_reason"].iloc[-1] == "quantity"
+
+
+def test_flag_value_outliers_detects_extreme_price():
+    df = pd.DataFrame({
+        "item_key": ["consultoria"] * 6,
+        "unit_price": [100.0, 100000000.0, 105.0, 98.0, 102.0, 99.0],
+        "quantity": [1] * 6,
+    })
+    resultado = flag_value_outliers(df, item_col="item_key", min_group_size=5)
+    linha_outlier = resultado[resultado["is_value_outlier"]]
+    assert len(linha_outlier) == 1
+    assert linha_outlier["outlier_reason"].iloc[0] == "unit_price"
+
+
+def test_flag_value_outliers_small_group_not_evaluated():
+    df = pd.DataFrame({
+        "item_key": ["item_raro", "item_raro"],
+        "unit_price": [100.0, 100000000.0],
+        "quantity": [1, 1],
+    })
+    resultado = flag_value_outliers(df, item_col="item_key", min_group_size=5)
+    assert resultado["is_value_outlier"].sum() == 0
+    assert resultado["z_log_unit_price"].isna().all()
+
+
+def test_flag_value_outliers_catches_combined_price_and_quantity_effect():
+    # Nem unit_price nem quantity, isolados, sao extremos -- mas o produto
+    # (total_price) e astronomico. Reproduz achado real (Fase 6): item
+    # generico demais mistura contratos de escala muito diferente, e um
+    # valor "moderadamente alto" nas duas dimensoes ao mesmo tempo passa
+    # despercebido checando cada coluna separadamente.
+    n = 20
+    df = pd.DataFrame({
+        "item_key": ["servico_generico"] * n,
+        "unit_price": [100.0] * (n - 1) + [50000.0],
+        "quantity": [10.0] * (n - 1) + [50000.0],
+    })
+    df["total_price"] = df["unit_price"] * df["quantity"]
+
+    resultado = flag_value_outliers(df, item_col="item_key")
+    assert resultado["is_value_outlier"].iloc[-1] == True
+    assert "total_price" in resultado["outlier_reason"].iloc[-1]

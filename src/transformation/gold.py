@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import numpy as np
 
 # Nota de design: _strip_accents tem underscore (convenção de "privado" do
 # módulo silver.py), mas reaproveitamos aqui em vez de duplicar a lógica.
@@ -312,6 +313,97 @@ def build_dim_date(data_inicio, data_fim) -> pd.DataFrame:
     })
 
 
+def _vectorized_modified_zscore(
+    df: pd.DataFrame, group_col: str, value_col: str, min_group_size: int
+) -> pd.Series:
+    """Modified z-score (Iglewicz & Hoaglin) por grupo, totalmente
+    vetorizado (sem apply/loop por grupo -- mesma licao de performance de
+    build_dim_item). Usa mediana/MAD em vez de media/desvio padrao: z-score
+    classico e distorcido pelo proprio outlier extremo que queremos
+    detectar (achado real, ADR-0014 -- ver contexto).
+
+    Grupos com menos de min_group_size observacoes validas retornam NaN
+    (nao avaliado, nao "nao-outlier") -- nao ha base estatistica para
+    avaliar item raro com poucas transacoes.
+    """
+    n_valid = df.groupby(group_col)[value_col].transform("count")
+    median = df.groupby(group_col)[value_col].transform("median")
+    abs_dev = (df[value_col] - median).abs()
+    mad = abs_dev.groupby(df[group_col]).transform("median")
+    std = df.groupby(group_col)[value_col].transform("std")
+
+    z = 0.6745 * (df[value_col] - median) / mad
+    fallback = (df[value_col] - median) / std
+    z = z.where(mad != 0, fallback)
+    z = z.where(~((mad == 0) & (std.isna() | (std == 0))), 0.0)
+    z = z.where(n_valid >= min_group_size, np.nan)
+    return z
+
+
+def flag_value_outliers(
+    df: pd.DataFrame,
+    item_col: str = "item_key",
+    columns_to_check: list[str] | None = None,
+    z_threshold: float = 3.5,
+    min_group_size: int = 5,
+    include_total: bool = True,
+) -> pd.DataFrame:
+    """Flag nao-destrutiva de outlier de valor (ADR-0014). Achado real: 20
+    de 5.788.938 linhas (0,0003%) concentravam 85,34% do spend total --
+    lancamento incorreto de preco/quantidade na fonte, nao gasto real.
+
+    Checa unit_price e quantity SEPARADAMENTE, por item_key, em escala log
+    (distribuicoes de preco/quantidade sao tipicamente assimetricas).
+    Um outlier de quantidade com preco normal (ex: notebook a R$2.000 mas
+    6,26 milhoes de unidades) nao apareceria checando so total_price.
+
+    Nao remove nenhuma linha -- adiciona is_value_outlier (bool),
+    outlier_reason (qual coluna disparou), z_log_<coluna> (score bruto) e
+    n_transacoes_grupo_outlier_check (transparencia sobre base estatistica).
+    Itens com poucas transacoes (min_group_size) nao sao avaliados
+    estatisticamente -- limitacao conhecida, nao escondida.
+    
+    include_total=True (default): tambem checa total_price como terceira
+    dimensao. Achado real (Fase 6): quando unit_price E quantity ficam
+    ambos moderadamente altos (z entre 2,5-3,0, abaixo do limiar
+    isoladamente), o produto (total_price) pode ser astronomico sem
+    nenhuma das duas colunas componentes disparar o flag sozinha --
+    ex: unit_price com z=1,73 e quantity com z=0,0 (quantity=1) geraram
+    total_price=R$10,46 bi, nao capturado checando as colunas em separado.
+    """
+    if columns_to_check is None:
+        columns_to_check = ["unit_price", "quantity"]
+        if include_total and "total_price" in df.columns:
+            columns_to_check = columns_to_check + ["total_price"]
+
+    df = df.copy()
+    df["n_transacoes_grupo_outlier_check"] = df.groupby(item_col)[item_col].transform("size")
+
+    z_cols = []
+    for col in columns_to_check:
+        if col not in df.columns:
+            continue
+        log_col = f"_log_{col}"
+        z_col = f"z_log_{col}"
+        df[log_col] = np.where(df[col] > 0, np.log(df[col].where(df[col] > 0)), np.nan)
+        df[z_col] = _vectorized_modified_zscore(df, item_col, log_col, min_group_size)
+        df = df.drop(columns=[log_col])
+        z_cols.append((col, z_col))
+
+    if z_cols:
+        abs_z_df = pd.DataFrame({col: df[z_col].abs() for col, z_col in z_cols})
+        df["is_value_outlier"] = (abs_z_df > z_threshold).any(axis=1)
+        motivos_df = abs_z_df > z_threshold
+        df["outlier_reason"] = motivos_df.apply(
+            lambda row: ",".join(c for c in motivos_df.columns if row[c]) or None, axis=1
+        )
+    else:
+        df["is_value_outlier"] = False
+        df["outlier_reason"] = None
+
+    return df
+
+
 def build_fact_purchase(
     df_item_silver: pd.DataFrame, dim_buyer: pd.DataFrame, dim_item: pd.DataFrame
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
@@ -376,12 +468,15 @@ def build_fact_purchase(
         "cod_item_catalogo_mais_frequente": df_final.get("cod_item_catalogo_mais_frequente"),
     })
 
+    fact = flag_value_outliers(fact, item_col="item_key")
+
     stats = {
         "n_linhas": len(fact),
         "join_buyer": stats_join_buyer,
         "n_excluidos_sem_resultado_homologado": n_excluidos_sem_resultado,
         "n_sem_item_key": int(fact["item_key"].isna().sum()),
         "n_sem_date_key": int(fact["date_key"].isna().sum()),
+        "n_outliers_valor_flagados": int(fact["is_value_outlier"].sum()),
     }
     return fact, stats
 
