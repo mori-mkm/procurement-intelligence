@@ -23,7 +23,21 @@ from src.quality.checks import load_bronze_csv
 # nunca converge, porque cada linha tem um valor próprio por definição.
 # COD_RESULTADO_ITEM confirmado como caso real em 22/05/2026: duas linhas
 # com conteúdo de negócio idêntico, diferindo só nesse campo.
-COLUNAS_IGNORAR_NA_DEDUP = ["COD_RESULTADO_ITEM", "srk_pncp_item_compra"]
+COLUNAS_IGNORAR_NA_DEDUP = [
+    "COD_RESULTADO_ITEM", "srk_pncp_item_compra",
+    "data_atualizacao_pncp", "data_inclusao_pncp",
+    "valor_unitario_estimado", "valor_total",
+    # Rotulo em texto livre de entidade ja unicamente identificada por
+    # cod_fornecedor (CNPJ) -- variacao de formatacao entre exportacoes
+    # nao representa fornecedor diferente. Mesma categoria de
+    # data_atualizacao_pncp. Achado real, Fase 5/ADR-0013, segunda rodada.
+    "nome_fornecedor",
+    # Quantidade PLANEJADA/estimada (nao quantidade_resultado, a
+    # homologada) -- pode ser corrigida administrativamente na fonte entre
+    # snapshots sem a quantidade real contratada mudar. Mesmo raciocinio
+    # de valor_unitario_estimado/valor_total.
+    "quantidade",
+]
 
 COLUNAS_MONETARIAS = [
     "valor_unitario_estimado", "valor_total", "valor_total_resultado", "valor_unitario_resultado",

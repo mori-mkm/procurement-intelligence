@@ -201,3 +201,45 @@ def test_compute_spend_total_excludes_conflicting_rows():
     assert resultado["spend_total_bruto"] == 13630.0
     assert resultado["spend_total_liquido_sem_conflitos"] == 100.0
     assert resultado["n_linhas_excluidas"] == 2
+
+
+def test_remove_exact_duplicates_ignores_metadata_timestamps():
+    df = pd.DataFrame({
+        "id_compra_item": ["1", "1"],
+        "cod_fornecedor": ["10", "10"],
+        "valor_unitario_resultado": ["63000.0", "63000.0"],
+        "quantidade": ["1", "1"],
+        "data_resultado": ["2024-12-09", "2024-12-09"],
+        "data_atualizacao_pncp": ["2024-12-09", "2025-09-17"],  # difere - so metadado
+    })
+    df_dedup, stats = remove_exact_duplicates(df)
+    assert stats["duplicatas_removidas"] == 1
+    assert len(df_dedup) == 1
+
+
+def test_remove_exact_duplicates_ignores_estimated_value_when_result_matches():
+    df = pd.DataFrame({
+        "id_compra_item": ["1", "1"],
+        "cod_fornecedor": ["10", "10"],
+        "valor_unitario_resultado": ["63000.0", "63000.0"],
+        "valor_total": ["110051.06", "108000.00"],  # estimativa reeditada entre anos
+        "quantidade": ["1", "1"],
+        "data_resultado": ["2024-12-09", "2024-12-09"],
+    })
+    df_dedup, stats = remove_exact_duplicates(df)
+    assert stats["duplicatas_removidas"] == 1
+    assert len(df_dedup) == 1
+
+
+def test_remove_exact_duplicates_ignores_supplier_label_and_estimated_quantity():
+    df = pd.DataFrame({
+        "id_compra_item": ["1", "1"],
+        "cod_fornecedor": ["10", "10"],
+        "nome_fornecedor": ["Empresa X LTDA", "EMPRESA X LTDA "],
+        "quantidade": ["100", "95"],
+        "quantidade_resultado": ["100", "100"],
+        "valor_unitario_resultado": ["50.0", "50.0"],
+        "data_resultado": ["2024-01-01", "2024-01-01"],
+    })
+    df_dedup, stats = remove_exact_duplicates(df)
+    assert stats["duplicatas_removidas"] == 1

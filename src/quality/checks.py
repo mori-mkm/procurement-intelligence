@@ -27,6 +27,58 @@ ID_COLUMNS = [
     "numero_controle_PNCP", "codigo_modalidade", "codigo_modo_disputa",
 ]
 
+
+# Colunas efetivamente usadas por todo o pipeline Silver/Gold (Fase 5).
+# Levantado por inspeção real de código (não suposição): nenhuma função em
+# transformation/silver.py ou transformation/gold.py referencia as
+# ~37 colunas restantes do schema bruto (TXT_LINK_*, codigo_NCM,
+# descricao_NCM, patrimonio, margem_preferencia_*, criterio_julgamento_*,
+# etc.). Reduz footprint de memória ao processar volume multi-ano --
+# necessário depois de MemoryError real ao combinar 2024+2025+2026
+# (~9.6M linhas) no Silver.
+NECESSARY_COLUMNS = [
+    "id_compra_item", "id_compra", "cod_fornecedor", "nome_fornecedor",
+    "cod_item_catalogo", "descricao_resumida", "material_ou_servico_nome",
+    "quantidade", "quantidade_resultado", "unidade_medida",
+    "valor_unitario_estimado", "valor_unitario_resultado",
+    "valor_total", "valor_total_resultado",
+    "data_inclusao_pncp", "data_atualizacao_pncp", "data_resultado",
+    "orgao_entidade_cnpj", "COD_RESULTADO_ITEM", "srk_pncp_item_compra",
+]
+
+
+# Schema legado: arquivos anuais de item de 2024 usam nomes de coluna
+# diferentes de 2025+ (achado real, Fase 5, ao combinar multiplos anos).
+# Sem essa normalizacao, select_necessary_columns descarta essas colunas
+# silenciosamente para 2024 inteiro -- item_key vira None para ~1.64M
+# linhas, tornando-as inuteis para qualquer analise por item.
+LEGACY_COLUMN_ALIASES = {
+    "descricao": "descricao_resumida",
+    "data_inclusao": "data_inclusao_pncp",
+    "data_atualizacao": "data_atualizacao_pncp",
+}
+
+
+def normalize_legacy_column_names(df: pd.DataFrame, aliases: dict = LEGACY_COLUMN_ALIASES) -> pd.DataFrame:
+    """Renomeia coluna legada para o nome canonico, SOMENTE se o nome
+    canonico ainda nao existir no df -- nunca sobrescreve dado real."""
+    rename_map = {
+        legado: canonico
+        for legado, canonico in aliases.items()
+        if canonico not in df.columns and legado in df.columns
+    }
+    return df.rename(columns=rename_map) if rename_map else df
+
+
+def select_necessary_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Reduz o DataFrame às colunas efetivamente usadas pelo pipeline
+    Silver/Gold (NECESSARY_COLUMNS). Aplica normalize_legacy_column_names
+    primeiro, para não perder dado de anos com schema antigo (2024)."""
+    df = normalize_legacy_column_names(df)
+    presentes = [c for c in NECESSARY_COLUMNS if c in df.columns]
+    return df[presentes].copy()
+
+
 def load_bronze_csv(path: Path) -> pd.DataFrame:
     """Lê o CSV bruto de Bronze exatamente como está.
 

@@ -8,6 +8,8 @@ from src.quality.checks import (
     missing_reference_check,
     unit_heterogeneity,
     schema_drift_check,
+    select_necessary_columns,
+    normalize_legacy_column_names,
 )
 
 
@@ -95,3 +97,28 @@ def test_list_multi_unit_items_sorts_by_transaction_volume():
     assert len(resultado) == 2  # A e B têm múltiplas unidades; C não
     assert resultado[0]["item"] == "A"
     assert resultado[0]["n_transacoes"] == 3
+
+
+def test_select_necessary_columns_keeps_only_relevant():
+    df = pd.DataFrame({
+        "id_compra_item": ["1"],
+        "descricao_resumida": ["Notebook"],
+        "TXT_LINK_MATERIAL": ["http://exemplo.com"],
+    })
+    resultado = select_necessary_columns(df)
+    assert "TXT_LINK_MATERIAL" not in resultado.columns
+    assert "id_compra_item" in resultado.columns
+    assert "descricao_resumida" in resultado.columns
+
+
+def test_normalize_legacy_column_names_renames_when_canonical_absent():
+    df = pd.DataFrame({"descricao": ["Notebook"], "data_inclusao": ["2024-01-01"]})
+    resultado = normalize_legacy_column_names(df)
+    assert "descricao_resumida" in resultado.columns
+    assert "descricao" not in resultado.columns
+
+
+def test_normalize_legacy_column_names_never_overwrites_canonical():
+    df = pd.DataFrame({"descricao": ["Legado"], "descricao_resumida": ["Real"]})
+    resultado = normalize_legacy_column_names(df)
+    assert resultado["descricao_resumida"].iloc[0] == "Real"
