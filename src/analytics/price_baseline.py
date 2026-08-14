@@ -19,24 +19,69 @@ ANO_TESTE = 2026
 
 
 def prepare_baseline_dataset(df_fact: pd.DataFrame) -> pd.DataFrame:
-    """Aplica o escopo definido no ADR-0015 antes de qualquer calculo de
-    baseline: (1) so categorias relevantes (ADR-0009); (2) exclui
-    outliers de valor, calculados DENTRO do universo ja filtrado por
-    categoria -- nao no fact inteiro (correcao: a mediana global de
-    referencia precisa ser do mesmo universo que sera analisado, senao
-    "extremo" e definido contra um universo diferente do que estamos
-    medindo, distorcendo o resultado); (3) adiciona coluna 'ano'.
     """
-    df = df_fact[df_fact["categoria_relevante"].notna()].copy()
+    Aplica o escopo de Price Intelligence antes de qualquer baseline
+    ou modelo de preco:
 
-    is_outlier = df["is_value_outlier"].fillna(False) if "is_value_outlier" in df.columns else pd.Series(False, index=df.index)
+    1. Mantem apenas categorias relevantes (ADR-0009).
+    2. Exige unit_price > 0 e quantity > 0.
+    3. Exclui outliers de valor.
+    4. Aplica a protecao adicional por mediana global dentro do mesmo
+       universo economico valido.
+    5. Adiciona a coluna 'ano'.
+
+    Registros com preco ou quantidade nao positivos permanecem na camada
+    Gold, mas nao representam observacoes economicamente validas para
+    modelagem de preco.
+    """
+
+    df = df_fact[
+        df_fact["categoria_relevante"].notna()
+    ].copy()
+
+    # ---------------------------------------------------------
+    # Validade economica da observacao
+    # ---------------------------------------------------------
+    df["unit_price"] = pd.to_numeric(
+        df["unit_price"],
+        errors="coerce",
+    )
+
+    df["quantity"] = pd.to_numeric(
+        df["quantity"],
+        errors="coerce",
+    )
+
+    df = df[
+        df["unit_price"].notna()
+        & df["quantity"].notna()
+        & (df["unit_price"] > 0)
+        & (df["quantity"] > 0)
+    ].copy()
+
+    # ---------------------------------------------------------
+    # Outliers ja identificados na Gold
+    # ---------------------------------------------------------
+    is_outlier = (
+        df["is_value_outlier"].fillna(False)
+        if "is_value_outlier" in df.columns
+        else pd.Series(False, index=df.index)
+    )
+
     df = df[~is_outlier]
 
+    # ---------------------------------------------------------
+    # Safety net de valores extremos dentro do universo filtrado
+    # ---------------------------------------------------------
     if "total_price" in df.columns:
         is_extremo = flag_extreme_by_global_median(df)
-        df = df[~is_extremo.reindex(df.index).fillna(False)]
+
+        df = df[
+            ~is_extremo.reindex(df.index).fillna(False)
+        ]
 
     df["ano"] = df["date_key"] // 10000
+
     return df
 
 

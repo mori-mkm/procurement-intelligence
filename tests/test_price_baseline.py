@@ -11,10 +11,21 @@ from src.analytics.price_baseline import (
 def make_fact_df():
     return pd.DataFrame({
         "item_key": ["notebook"] * 6 + ["mouse"] * 2 + ["fruta"] * 3,
-        "unit_price": [1000.0, 1100.0, 900.0, 1050.0, 950.0, 1200.0, 50.0, 55.0, 10.0, 12.0, 11.0],
-        "date_key": [20240101, 20240201, 20240301, 20250101, 20260101, 20240401,
-                     20240101, 20250101, 20240101, 20240101, 20240101],
-        "categoria_relevante": ["TI / Informatica"] * 8 + [None] * 3,
+        "unit_price": [
+            1000.0, 1100.0, 900.0, 1050.0, 950.0, 1200.0,
+            50.0, 55.0,
+            10.0, 12.0, 11.0,
+        ],
+        "quantity": [1.0] * 11,
+        "date_key": [
+            20240101, 20240201, 20240301,
+            20250101, 20260101, 20240401,
+            20240101, 20250101,
+            20240101, 20240101, 20240101,
+        ],
+        "categoria_relevante": [
+            "TI / Informatica"
+        ] * 8 + [None] * 3,
         "is_value_outlier": [False] * 11,
     })
 
@@ -70,3 +81,31 @@ def test_evaluate_baseline_handles_empty_evaluable_set():
     resultado = evaluate_baseline(df_vazio, baseline)
     assert resultado["n_transacoes_total"] == 0
     assert resultado["mae"] is None
+
+
+def test_prepare_baseline_dataset_excludes_non_positive_price():
+    df = make_fact_df()
+
+    df.loc[0, "unit_price"] = 0.0
+    df.loc[1, "unit_price"] = -10.0
+
+    resultado = prepare_baseline_dataset(df)
+
+    assert (resultado["unit_price"] > 0).all()
+
+    assert 0 not in resultado.index
+    assert 1 not in resultado.index
+
+
+def test_prepare_baseline_dataset_excludes_non_positive_quantity():
+    df = make_fact_df()
+
+    df.loc[0, "quantity"] = 0.0
+    df.loc[1, "quantity"] = -1.0
+
+    resultado = prepare_baseline_dataset(df)
+
+    assert (resultado["quantity"] > 0).all()
+
+    assert 0 not in resultado.index
+    assert 1 not in resultado.index
