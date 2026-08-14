@@ -59,3 +59,178 @@ def summarize_anomalies(df: pd.DataFrame) -> dict[str, Any]:
             float(anomalias.loc[anomalias["anomaly_direction"] == "acima_do_esperado", "total_price"].sum()), 2
         ) if "total_price" in df.columns else None,
     }
+
+
+def calibrate_anomaly_threshold(
+    errors: pd.DataFrame,
+    percentil: float = 95.0,
+    known_only: bool = True,
+) -> float:
+    """
+    Calibra um limiar fixo de anomalia usando abs_log_error.
+
+    O threshold deve ser aprendido em uma amostra de calibracao
+    anterior ao conjunto no qual sera aplicado.
+
+    Por padrao, somente itens conhecidos entram na calibracao.
+    """
+
+    if not 0 < percentil <= 100:
+        raise ValueError(
+            "percentil precisa estar no intervalo (0, 100]"
+        )
+
+    if "abs_log_error" not in errors.columns:
+        raise ValueError(
+            "Coluna obrigatoria ausente: abs_log_error"
+        )
+
+    if known_only:
+        if "is_known_item" not in errors.columns:
+            raise ValueError(
+                "is_known_item e obrigatorio quando known_only=True"
+            )
+
+        avaliavel = (
+            errors["is_known_item"]
+            .fillna(False)
+            .astype(bool)
+        )
+
+    else:
+        avaliavel = pd.Series(
+            True,
+            index=errors.index,
+        )
+
+    valores = (
+        errors.loc[
+            avaliavel,
+            "abs_log_error",
+        ]
+        .dropna()
+    )
+
+    if valores.empty:
+        raise ValueError(
+            "Nao existem observacoes avaliaveis para calibrar o threshold"
+        )
+
+    threshold = valores.quantile(
+        percentil / 100.0
+    )
+
+    return float(threshold)
+
+
+def flag_price_anomalies_frozen(
+    errors: pd.DataFrame,
+    threshold: float,
+    known_only: bool = True,
+) -> pd.DataFrame:
+    """
+    Aplica um threshold previamente calibrado.
+
+    Esta funcao NAO recalcula percentis no conjunto recebido.
+    """
+
+    if threshold < 0:
+        raise ValueError(
+            "threshold nao pode ser negativo"
+        )
+
+    required = {
+        "log_unit_price_real",
+        "log_unit_price_pred",
+        "unit_price",
+        "unit_price_pred",
+        "abs_log_error",
+    }
+
+    missing = required - set(errors.columns)
+
+    if missing:
+        raise ValueError(
+            "Colunas obrigatorias ausentes: "
+            f"{sorted(missing)}"
+        )
+
+    df = errors.copy()
+
+    if known_only:
+        if "is_known_item" not in df.columns:
+            raise ValueError(
+                "is_known_item e obrigatorio quando known_only=True"
+            )
+
+        avaliavel = (
+            df["is_known_item"]
+            .fillna(False)
+            .astype(bool)
+        )
+
+    else:
+        avaliavel = pd.Series(
+            True,
+            index=df.index,
+        )
+
+    df["residuo_log"] = (
+        df["log_unit_price_real"]
+        - df["log_unit_price_pred"]
+    )
+
+    # Mantem compatibilidade com Savings Engine.
+    df["preco_esperado"] = (
+        df["unit_price_pred"]
+    )
+
+    denominador = (
+        df["preco_esperado"]
+        .replace(0, np.nan)
+    )
+
+    df["price_deviation_pct"] = (
+        100
+        * (
+            df["unit_price"]
+            - df["preco_esperado"]
+        )
+        / denominador
+    )
+
+    df["anomaly_threshold_abs_log"] = float(
+        threshold
+    )
+
+    df["is_price_anomaly"] = (
+        avaliavel
+        & (
+            df["abs_log_error"]
+            >= threshold
+        )
+    )
+
+    df["anomaly_direction"] = np.select(
+        [
+            (
+                df["is_price_anomaly"]
+                & (df["residuo_log"] > 0)
+            ),
+            (
+                df["is_price_anomaly"]
+                & (df["residuo_log"] <= 0)
+            ),
+        ],
+        [
+            "acima_do_esperado",
+            "abaixo_do_esperado",
+        ],
+        default=np.where(
+            avaliavel,
+            "normal",
+            "nao_avaliavel",
+        ),
+    )
+
+    return df

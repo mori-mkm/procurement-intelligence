@@ -1,6 +1,12 @@
 ﻿import pandas as pd
 
-from src.analytics.savings_engine import compute_savings_opportunity, rank_savings_by_category, summarize_savings
+from src.analytics.savings_engine import (
+    compute_savings_opportunity,
+    rank_savings_by_category,
+    summarize_savings,
+    classify_savings_priority,
+    classify_savings_confidence,
+)
 
 
 def make_anomalias_df():
@@ -31,3 +37,87 @@ def test_summarize_savings_separates_high_ticket():
     df = compute_savings_opportunity(make_anomalias_df())
     resumo = summarize_savings(df)
     assert resumo["savings_potencial_excluindo_ticket_alto"] < resumo["savings_potencial_total"]
+
+
+def test_classify_savings_priority_uses_financial_impact():
+    df = pd.DataFrame(
+        {
+            "potential_saving": [
+                60.0,
+                20.0,
+                10.0,
+                10.0,
+            ]
+        }
+    )
+
+    result = classify_savings_priority(df)
+
+    assert result["priority"].tolist() == [
+        "Alta",
+        "Alta",
+        "Media",
+        "Baixa",
+    ]
+
+    assert result[
+        "savings_cumulative_share"
+    ].iloc[-1] == 1.0
+
+
+def test_classify_savings_priority_handles_empty_dataframe():
+    df = pd.DataFrame(
+        {
+            "potential_saving": []
+        }
+    )
+
+    result = classify_savings_priority(df)
+
+    assert result.empty
+    assert "priority" in result.columns
+    assert "savings_cumulative_share" in result.columns
+
+
+def test_classify_savings_confidence():
+    df = pd.DataFrame(
+        {
+            "ticket_alto_cautela": [
+                False,
+                True,
+                False,
+            ],
+            "flag_pouco_historico": [
+                False,
+                False,
+                False,
+            ],
+            "flag_unidade_nao_comparavel": [
+                False,
+                False,
+                True,
+            ],
+            "flag_inconsistencia_total": [
+                False,
+                False,
+                False,
+            ],
+            "flag_resultado_conflitante": [
+                False,
+                False,
+                False,
+            ],
+        }
+    )
+
+    result = classify_savings_confidence(
+        df
+    )
+
+    assert result[
+        "confidence_tier"
+    ].tolist() == [
+        "Alta",
+        "Revisao Alto Valor",
+        "Baixa",
+    ]
