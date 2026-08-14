@@ -24,6 +24,7 @@ from src.analytics.price_baseline import prepare_baseline_dataset, split_tempora
 from src.analytics.price_ml import engineer_features, align_categorical_dtypes, train_lightgbm_model
 from src.analytics.anomaly_detection import compute_residuals, flag_price_anomalies, summarize_anomalies
 from src.analytics.savings_engine import compute_savings_opportunity, rank_savings_by_category, summarize_savings
+from src.analytics.price_ml import FEATURES_CATEGORICAS, FEATURES_NUMERICAS
 
 st.set_page_config(page_title="Procurement Intelligence", layout="wide")
 
@@ -45,12 +46,18 @@ def carregar_tudo():
     teste_flag = flag_price_anomalies(teste_residuo, percentil=95)
     savings = compute_savings_opportunity(teste_flag)
 
+    categorias_treino = {col: treino[col].cat.categories for col in FEATURES_CATEGORICAS}
+
+    categorias_treino = {col: treino[col].cat.categories for col in FEATURES_CATEGORICAS}
+    lista_features = FEATURES_CATEGORICAS + FEATURES_NUMERICAS
+
     return {
         "fact": fact,
         "df_prep": df_prep,
         "baseline": baseline,
         "modelo": modelo,
-        "features": treino.columns,
+        "features": lista_features,
+        "categorias_treino": categorias_treino,
         "teste_flag": teste_flag,
         "savings": savings,
     }
@@ -135,7 +142,9 @@ with aba_consulta:
 
         exemplo = dados["df_prep"][dados["df_prep"]["item_key"] == item_selecionado].head(1)
         if not exemplo.empty:
-            entrada = exemplo[dados["features"]]
+            entrada = exemplo[dados["features"]].copy()
+            for col, categorias in dados["categorias_treino"].items():
+                entrada[col] = pd.Categorical(entrada[col], categories=categorias)
             contrib = dados["modelo"].booster_.predict(entrada, pred_contrib=True)
             nomes = list(dados["features"]) + ["base_value"]
             st.subheader("Explicabilidade (SHAP) — contribuição por fator, em escala log(preço)")
