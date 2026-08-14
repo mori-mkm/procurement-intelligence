@@ -5,6 +5,7 @@ import pytest
 from src.analytics.model_selection import (
     build_prediction_errors,
     evaluate_prediction_errors,
+    clustered_paired_bootstrap,
 )
 
 
@@ -128,3 +129,110 @@ def test_observation_id_preserves_original_index():
         205,
         999,
     ]
+
+
+def test_clustered_bootstrap_detects_reference_better():
+    reference = pd.DataFrame(
+        {
+            "observation_id": [1, 2, 3, 4, 5, 6],
+            "item_key": [
+                "a", "a",
+                "b", "b",
+                "c", "c",
+            ],
+            "abs_log_error": [
+                1.0, 1.0,
+                1.0, 1.0,
+                1.0, 1.0,
+            ],
+        }
+    )
+
+    challenger = pd.DataFrame(
+        {
+            "observation_id": [1, 2, 3, 4, 5, 6],
+            "item_key": [
+                "a", "a",
+                "b", "b",
+                "c", "c",
+            ],
+            "abs_log_error": [
+                2.0, 2.0,
+                2.0, 2.0,
+                2.0, 2.0,
+            ],
+        }
+    )
+
+    result = clustered_paired_bootstrap(
+        reference_errors=reference,
+        challenger_errors=challenger,
+        reference_name="reference",
+        challenger_name="challenger",
+        n_bootstrap=500,
+        random_state=42,
+    )
+
+    assert result["delta_mae_log"] == pytest.approx(1.0)
+    assert result["ci_low"] > 0
+    assert result["ci_high"] > 0
+    assert result["conclusion"] == "reference_better"
+
+
+def test_clustered_bootstrap_identical_models_is_inconclusive():
+    reference = pd.DataFrame(
+        {
+            "observation_id": [1, 2, 3, 4],
+            "item_key": [
+                "a", "a",
+                "b", "b",
+            ],
+            "abs_log_error": [
+                1.0, 2.0,
+                3.0, 4.0,
+            ],
+        }
+    )
+
+    challenger = reference.copy()
+
+    result = clustered_paired_bootstrap(
+        reference_errors=reference,
+        challenger_errors=challenger,
+        reference_name="reference",
+        challenger_name="challenger",
+        n_bootstrap=500,
+        random_state=42,
+    )
+
+    assert result["delta_mae_log"] == pytest.approx(0.0)
+    assert result["ci_low"] == pytest.approx(0.0)
+    assert result["ci_high"] == pytest.approx(0.0)
+    assert result["conclusion"] == "inconclusive"
+
+
+def test_clustered_bootstrap_rejects_different_samples():
+    reference = pd.DataFrame(
+        {
+            "observation_id": [1, 2, 3],
+            "item_key": ["a", "b", "c"],
+            "abs_log_error": [1.0, 1.0, 1.0],
+        }
+    )
+
+    challenger = pd.DataFrame(
+        {
+            "observation_id": [1, 2],
+            "item_key": ["a", "b"],
+            "abs_log_error": [1.0, 1.0],
+        }
+    )
+
+    with pytest.raises(ValueError):
+        clustered_paired_bootstrap(
+            reference_errors=reference,
+            challenger_errors=challenger,
+            reference_name="reference",
+            challenger_name="challenger",
+            n_bootstrap=100,
+        )

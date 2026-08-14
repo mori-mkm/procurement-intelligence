@@ -9,6 +9,7 @@ Objetivo:
 """
 
 import sys
+import json
 from pathlib import Path
 
 
@@ -24,6 +25,7 @@ def achar_raiz_projeto(caminho_inicial: Path) -> Path:
 
 RAIZ = achar_raiz_projeto(Path(__file__))
 sys.path.insert(0, str(RAIZ))
+OUTPUT_DIR = RAIZ / "data" / "model_validation"
 
 
 from src.transformation.gold import load_gold_layer
@@ -76,22 +78,39 @@ def main():
 
     splits = split_temporal(df)
 
-    treino = splits["treino"]
-    validacao = splits["validacao"]
+    # Mantemos uma versao original dos dados para preservar
+    # observation_id, item_key e demais metadados da transacao.
+    #
+    # A versao transformada sera usada SOMENTE como entrada
+    # do LightGBM.
+    treino_raw = splits["treino"].copy()
+    validacao_raw = splits["validacao"].copy()
 
-    print(f"Treino 2024:     {len(treino):,}")
-    print(f"Validacao 2025: {len(validacao):,}")
+    print(f"Treino 2024:     {len(treino_raw):,}")
+    print(f"Validacao 2025: {len(validacao_raw):,}")
 
     print("\nIMPORTANTE: 2026 nao sera avaliado nesta etapa.")
 
     # ---------------------------------------------------------
+    # Identidade dos itens antes de qualquer transformacao
+    # ---------------------------------------------------------
+    train_item_keys = (
+        treino_raw["item_key"]
+        .dropna()
+        .unique()
+    )
+
+    # ---------------------------------------------------------
     # 4. Alinhar categorias usando SOMENTE o treino
+    #
+    # Estas copias sao exclusivas para entrada do modelo.
+    # O validacao_raw permanece intacto para auditoria.
     # ---------------------------------------------------------
     print("\n[4/6] Alinhando categorias...")
 
-    treino, validacao = align_categorical_dtypes(
-        treino,
-        validacao,
+    treino_modelo, validacao_modelo = align_categorical_dtypes(
+        treino_raw.copy(),
+        validacao_raw.copy(),
     )
 
     # ---------------------------------------------------------
@@ -99,12 +118,17 @@ def main():
     # ---------------------------------------------------------
     print("\n[5/6] Treinando LightGBM v0...")
 
-    modelo = train_lightgbm_model(treino)
+    modelo = train_lightgbm_model(
+        treino_modelo
+    )
 
-    features = FEATURES_CATEGORICAS + FEATURES_NUMERICAS
+    features = (
+        FEATURES_CATEGORICAS
+        + FEATURES_NUMERICAS
+    )
 
     log_pred = modelo.predict(
-        validacao[features]
+        validacao_modelo[features]
     )
 
     # ---------------------------------------------------------
@@ -112,14 +136,11 @@ def main():
     # ---------------------------------------------------------
     print("\n[6/6] Calculando metricas...")
 
-    train_item_keys = (
-        treino["item_key"]
-        .dropna()
-        .unique()
-    )
-
+    # IMPORTANTE:
+    # previsao vem do DataFrame preparado para o modelo,
+    # mas metadados vêm do DataFrame original.
     errors = build_prediction_errors(
-        df=validacao,
+        df=validacao_raw,
         log_pred=log_pred,
         model_name="LightGBM_v0",
         train_item_keys=train_item_keys,
@@ -168,6 +189,46 @@ def main():
         print(f"MAE log:            {unseen_metrics['mae_log']:.6f}")
         print(f"MedAPE:             {unseen_metrics['medape']:.2f}%")
         print(f"WAPE:               {unseen_metrics['wape']:.2f}%")
+
+    # ---------------------------------------------------------
+    # Persistir resultados para comparacao futura
+    # ---------------------------------------------------------
+    OUTPUT_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    errors_path = (
+        OUTPUT_DIR
+        / "lightgbm_v0_validation_2025_errors.parquet"
+    )
+
+    metrics_path = (
+        OUTPUT_DIR
+        / "lightgbm_v0_validation_2025_metrics.json"
+    )
+
+    errors.to_parquet(
+        errors_path,
+        index=False,
+    )
+
+    with metrics_path.open(
+        "w",
+        encoding="utf-8",
+    ) as f:
+        json.dump(
+            metrics,
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+    print("\n" + "-" * 70)
+    print("ARQUIVOS SALVOS")
+    print("-" * 70)
+    print(errors_path)
+    print(metrics_path)
 
     print("\n" + "=" * 70)
     print("FIM — nenhum resultado de 2026 foi utilizado.")
