@@ -1,0 +1,20 @@
+﻿# Data Engineering
+pandas==3.0.5
+numpy==2.4.6
+pyarrow==24.0.0
+duckdb==1.5.5
+requests==2.34.2
+
+# Data Science / ML
+scikit-learn==1.9.0
+lightgbm==4.7.0
+xgboost==3.2.0
+catboost==1.2.10
+scipy==1.17.1
+
+# App
+streamlit==1.61.1
+altair==6.2.2
+
+# Testes
+pytest==9.1.1
