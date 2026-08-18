@@ -29,6 +29,28 @@ sys.path.insert(0, str(RAIZ))
 
 
 import altair as alt
+
+
+def _tema_procurement_intelligence():
+    return {
+        "config": {
+            "background": "#FFFFFF",
+            "view": {"fill": "#FFFFFF", "stroke": "transparent"},
+            "axis": {
+                "domainColor": "#E9E9EE",
+                "gridColor": "#E9E9EE",
+                "labelColor": "#1F2024",
+                "titleColor": "#1F2024",
+                "tickColor": "#E9E9EE",
+            },
+            "legend": {"labelColor": "#1F2024", "titleColor": "#1F2024"},
+            "title": {"color": "#1F2024"},
+        }
+    }
+
+
+alt.themes.register("procurement_intelligence", _tema_procurement_intelligence)
+alt.themes.enable("procurement_intelligence")
 import pandas as pd
 import streamlit as st
 
