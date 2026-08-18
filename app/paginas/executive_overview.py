@@ -13,31 +13,18 @@ from app.helpers import (
 
 
 def render(dados):
-    if not dados["gold_disponivel"]:
-        st.warning(
-            "Esta secao depende do dataset completo (Gold), nao disponivel "
-            "neste ambiente de demonstracao. Rode o projeto localmente com "
-            "o pipeline completo (ver README, secao Como Rodar) para visualizar."
-        )
-        st.stop()
-
     # ========================================================
     # BASE EXECUTIVA
     # ========================================================
-    fact_relevante = dados["fact"][
-        dados["fact"]["categoria_relevante"]
-        .notna()
-    ].copy()
 
     spend_relevante = dados["spend_by_category"]
 
     hhi_relevante = dados["hhi_by_category"]
 
-    fornecedores_relevantes = (
-        build_supplier_abc_curve(
-            fact_relevante
-        )
-    )
+    fornecedores_relevantes = dados["supplier_abc_by_category"][
+        dados["supplier_abc_by_category"]["categoria_relevante"]
+        == "__GLOBAL__"
+    ].copy()
 
     savings = dados["savings"]
 

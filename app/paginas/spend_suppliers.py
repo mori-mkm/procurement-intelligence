@@ -13,32 +13,6 @@ from app.helpers import (
 
 
 def render(dados):
-    if not dados["gold_disponivel"]:
-        st.warning(
-            "Esta secao depende do dataset completo (Gold), nao disponivel "
-            "neste ambiente de demonstracao. Rode o projeto localmente com "
-            "o pipeline completo (ver README, secao Como Rodar) para visualizar."
-        )
-        st.stop()
-
-    fact_relevante = dados["fact"][
-        dados["fact"]["categoria_relevante"]
-        .notna()
-    ].copy()
-
-    dim_supplier = (
-        dados["dim_supplier"][
-            [
-                "supplier_key",
-                "nome_fornecedor",
-            ]
-        ]
-        .drop_duplicates(
-            "supplier_key"
-        )
-        .copy()
-    )
-
     # --------------------------------------------------------
     # Analises globais
     # --------------------------------------------------------
@@ -47,9 +21,10 @@ def render(dados):
 
     hhi_cat = dados["hhi_by_category"]
 
-    abc_global = build_supplier_abc_curve(
-        fact_relevante
-    )
+    abc_global = dados["supplier_abc_by_category"][
+        dados["supplier_abc_by_category"]["categoria_relevante"]
+        == "__GLOBAL__"
+    ].copy()
 
     spend_total = float(
         spend_cat["spend_total"].sum()
@@ -441,36 +416,10 @@ def render(dados):
         .iloc[0]
     )
 
-    abc = build_supplier_abc_curve(
-        fact_relevante,
-        category=categoria_selecionada,
-    ).copy()
-
-    # Tipagem segura para o join
-    abc["supplier_key"] = (
-        abc["supplier_key"]
-        .astype("string")
-    )
-
-    dim_supplier_join = (
-        dim_supplier.copy()
-    )
-
-    dim_supplier_join[
-        "supplier_key"
-    ] = (
-        dim_supplier_join[
-            "supplier_key"
-        ]
-        .astype("string")
-    )
-
-    abc = abc.merge(
-        dim_supplier_join,
-        on="supplier_key",
-        how="left",
-        validate="many_to_one",
-    )
+    abc = dados["supplier_abc_by_category"][
+        dados["supplier_abc_by_category"]["categoria_relevante"]
+        == categoria_selecionada
+    ].copy()
 
     abc["Fornecedor"] = (
         abc["nome_fornecedor"]

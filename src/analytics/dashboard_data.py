@@ -47,6 +47,7 @@ ARTIFACT_FILES = {
     # -----------------------------------------------------
     "spend_by_category": "spend_by_category.parquet",
     "hhi_by_category": "hhi_by_category.parquet",
+    "supplier_abc_by_category": "supplier_abc_by_category.parquet",
 }
 
 
@@ -180,5 +181,8 @@ def load_dashboard_artifacts(
         ),
         "hhi_by_category": pd.read_parquet(
             paths["hhi_by_category"]
+        ),
+        "supplier_abc_by_category": pd.read_parquet(
+            paths["supplier_abc_by_category"]
         ),
     }
