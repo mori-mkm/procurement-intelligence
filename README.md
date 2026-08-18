@@ -596,3 +596,24 @@ dado bruto
 **Matheus Mori**  
 Estatístico — UFSCar  
 Data Science · Analytics · Machine Learning · Data Engineering
+
+## Quick Start (rodar o dashboard localmente)
+
+Pre-requisitos: Python 3.11+, Git.
+
+    git clone https://github.com/mori-mkm/procurement-intelligence.git
+    cd procurement-intelligence
+    pip install -r requirements.txt
+    python scripts/setup_demo.py
+    streamlit run app/dashboard.py
+
+O comando `setup_demo.py` verifica se os pacotes e os artefatos de dados
+necessarios estao presentes antes de abrir o dashboard. Os artefatos de
+Model Validation (data/model_validation/) ja vem versionados no
+repositorio -- nao e necessario rodar o pipeline completo (Bronze ate
+Gold) so para visualizar o dashboard.
+
+Para reproduzir o pipeline completo (ingestao, Bronze, Silver, Gold,
+treino de modelo) ao inves de usar os artefatos ja versionados, ver a
+secao "Como rodar" mais acima -- isso requer baixar os dados brutos do
+PNCP (nao versionados, ~centenas de MB) e leva alguns minutos.
