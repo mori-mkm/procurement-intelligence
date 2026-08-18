@@ -587,7 +587,12 @@ def carregar_dados_dashboard():
         artefatos oficiais produzidos pela Fase 13.
     """
 
-    gold = load_gold_layer()
+    try:
+        gold = load_gold_layer()
+        gold_disponivel = True
+    except FileNotFoundError:
+        gold = {"fact_purchase": None, "dim_supplier": None}
+        gold_disponivel = False
 
     artifacts = load_dashboard_artifacts(
         RAIZ
@@ -596,6 +601,7 @@ def carregar_dados_dashboard():
     return {
     "fact": gold["fact_purchase"],
     "dim_supplier": gold["dim_supplier"],
+    "gold_disponivel": gold_disponivel,
     **artifacts,
     }
 
@@ -626,12 +632,12 @@ with st.sidebar:
     )
 
     st.markdown(
-        '<div class="pi-sidebar-label">Navegação</div>',
+        '<div class="pi-sidebar-label">NavegaÃ§Ã£o</div>',
         unsafe_allow_html=True,
     )
 
     pagina = st.radio(
-        "Navegação",
+        "NavegaÃ§Ã£o",
         [
             "Executive Overview",
             "Spend & Suppliers",
@@ -649,13 +655,13 @@ with st.sidebar:
     )
 
     st.caption(
-        "PNCP — dados públicos utilizados como proxy "
+        "PNCP â€” dados pÃºblicos utilizados como proxy "
         "para Procurement Intelligence."
     )
 
     st.caption(
-        "Desenvolvimento: 2024 · "
-        "Validação: 2025 · "
+        "Desenvolvimento: 2024 Â· "
+        "ValidaÃ§Ã£o: 2025 Â· "
         "OOT: 2026"
     )
 
@@ -663,19 +669,19 @@ with st.sidebar:
 PAGE_INFO = {
     "Executive Overview": (
         "Executive Overview",
-        "Visão consolidada de spend, concentração, "
-        "desvios de preço e oportunidades financeiras.",
+        "VisÃ£o consolidada de spend, concentraÃ§Ã£o, "
+        "desvios de preÃ§o e oportunidades financeiras.",
     ),
 
     "Spend & Suppliers": (
         "Spend & Suppliers",
-        "Onde o dinheiro está sendo gasto e onde existe "
-        "concentração de fornecedores.",
+        "Onde o dinheiro estÃ¡ sendo gasto e onde existe "
+        "concentraÃ§Ã£o de fornecedores.",
     ),
 
     "Price Intelligence": (
         "Price Intelligence",
-        "Monitoramento de preços observados versus "
+        "Monitoramento de preÃ§os observados versus "
         "valores esperados pelo modelo.",
     ),
 
@@ -693,8 +699,8 @@ PAGE_INFO = {
 
     "Methodology": (
         "Methodology",
-        "Arquitetura, validação temporal, modelos e "
-        "regras metodológicas do projeto.",
+        "Arquitetura, validaÃ§Ã£o temporal, modelos e "
+        "regras metodolÃ³gicas do projeto.",
     ),
 }
 
@@ -715,7 +721,7 @@ st.markdown(
                 </div>
             </div>
             <div class="pi-data-badge">
-                PNCP · OOT 2026
+                PNCP Â· OOT 2026
             </div>
         </div>
         """
@@ -729,11 +735,17 @@ st.markdown(
 # ============================================================
 
 if pagina == "Executive Overview":
+    if not dados["gold_disponivel"]:
+        st.warning(
+            "Esta secao depende do dataset completo (Gold), nao disponivel "
+            "neste ambiente de demonstracao. Rode o projeto localmente com "
+            "o pipeline completo (ver README, secao Como Rodar) para visualizar."
+        )
+        st.stop()
 
     # ========================================================
     # BASE EXECUTIVA
     # ========================================================
-
     fact_relevante = dados["fact"][
         dados["fact"]["categoria_relevante"]
         .notna()
@@ -840,14 +852,14 @@ if pagina == "Executive Overview":
     )
 
     cols[2].metric(
-        "Potential Savings — Alta Confiança",
+        "Potential Savings â€” Alta ConfianÃ§a",
         formatar_brl_compacto(
             potential_high_confidence
         ),
     )
 
     cols[3].metric(
-        "Alto Valor em Revisão",
+        "Alto Valor em RevisÃ£o",
         formatar_brl_compacto(
             potential_review
         ),
@@ -860,7 +872,7 @@ if pagina == "Executive Overview":
     )
 
     cols[5].metric(
-        "Categorias com Alta Concentração",
+        "Categorias com Alta ConcentraÃ§Ã£o",
         f"{n_concentradas}",
     )
 
@@ -959,16 +971,16 @@ if pagina == "Executive Overview":
                 <p>
                     Foram identificados
                     <strong>{formatar_brl_compacto(potential_high_confidence)}</strong>
-                    em oportunidades de alta confiança.
+                    em oportunidades de alta confianÃ§a.
                 </p>
                 <p>
-                    A principal categoria em impacto potencial é
+                    A principal categoria em impacto potencial Ã©
                     <strong>{top_savings_categoria}</strong>,
                     com
                     <strong>{formatar_brl_compacto(top_savings_valor)}</strong>.
                 </p>
                 <p>
-                    A maior concentração de fornecedores ocorre em
+                    A maior concentraÃ§Ã£o de fornecedores ocorre em
                     <strong>{hhi_top["categoria_relevante"]}</strong>,
                     com HHI de
                     <strong>{hhi_top_fmt}</strong>.
@@ -1002,7 +1014,7 @@ if pagina == "Executive Overview":
 
         st.markdown(
             '<div class="pi-section-subtitle">'
-            'Distribuição do spend nas categorias '
+            'DistribuiÃ§Ã£o do spend nas categorias '
             'monitoradas.'
             '</div>',
             unsafe_allow_html=True,
@@ -1085,7 +1097,7 @@ if pagina == "Executive Overview":
                     ),
                     alt.Tooltip(
                         "share_formatado:N",
-                        title="Participação",
+                        title="ParticipaÃ§Ã£o",
                     ),
                 ],
             )
@@ -1114,8 +1126,8 @@ if pagina == "Executive Overview":
 
         st.markdown(
             '<div class="pi-section-subtitle">'
-            'Alta confiança versus oportunidades '
-            'de alto valor em revisão.'
+            'Alta confianÃ§a versus oportunidades '
+            'de alto valor em revisÃ£o.'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -1189,7 +1201,7 @@ if pagina == "Executive Overview":
 
                 color=alt.Color(
                     "confidence_tier:N",
-                    title="Confiança",
+                    title="ConfianÃ§a",
                     scale=alt.Scale(
                         domain=[
                             "Alta",
@@ -1209,7 +1221,7 @@ if pagina == "Executive Overview":
                     ),
                     alt.Tooltip(
                         "confidence_tier:N",
-                        title="Confiança",
+                        title="ConfianÃ§a",
                     ),
                     alt.Tooltip(
                         "valor_formatado:N",
@@ -1240,7 +1252,7 @@ if pagina == "Executive Overview":
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Itens priorizados para investigação e negociação.'
+        'Itens priorizados para investigaÃ§Ã£o e negociaÃ§Ã£o.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -1271,10 +1283,10 @@ if pagina == "Executive Overview":
                     "Categoria",
 
                 "unit_price":
-                    "Preço observado",
+                    "PreÃ§o observado",
 
                 "preco_esperado":
-                    "Preço esperado",
+                    "PreÃ§o esperado",
 
                 "potential_saving":
                     "Impacto potencial",
@@ -1290,12 +1302,12 @@ if pagina == "Executive Overview":
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Preço observado":
+            "PreÃ§o observado":
                 st.column_config.NumberColumn(
                     format="R$ %.2f"
                 ),
 
-            "Preço esperado":
+            "PreÃ§o esperado":
                 st.column_config.NumberColumn(
                     format="R$ %.2f"
                 ),
@@ -1308,9 +1320,9 @@ if pagina == "Executive Overview":
     )
 
     st.caption(
-        "Potential Savings é um indicador de priorização "
-        "para revisão e negociação; não representa economia "
-        "garantida, fraude ou sobrepreço comprovado."
+        "Potential Savings Ã© um indicador de priorizaÃ§Ã£o "
+        "para revisÃ£o e negociaÃ§Ã£o; nÃ£o representa economia "
+        "garantida, fraude ou sobrepreÃ§o comprovado."
     )
 
 
@@ -1319,6 +1331,13 @@ if pagina == "Executive Overview":
 # ============================================================
 
 if pagina == "Spend & Suppliers":
+    if not dados["gold_disponivel"]:
+        st.warning(
+            "Esta secao depende do dataset completo (Gold), nao disponivel "
+            "neste ambiente de demonstracao. Rode o projeto localmente com "
+            "o pipeline completo (ver README, secao Como Rodar) para visualizar."
+        )
+        st.stop()
 
     fact_relevante = dados["fact"][
         dados["fact"]["categoria_relevante"]
@@ -1415,19 +1434,19 @@ if pagina == "Spend & Suppliers":
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ========================================================
-    # VISÃO GLOBAL
+    # VISÃƒO GLOBAL
     # ========================================================
 
     st.markdown(
         '<div class="pi-section-title">'
-        'Visão global'
+        'VisÃ£o global'
         '</div>',
         unsafe_allow_html=True,
     )
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Distribuição do gasto e concentração '
+        'DistribuiÃ§Ã£o do gasto e concentraÃ§Ã£o '
         'de fornecedores por categoria.'
         '</div>',
         unsafe_allow_html=True,
@@ -1521,7 +1540,7 @@ if pagina == "Spend & Suppliers":
 
                     alt.Tooltip(
                         "share_formatado:N",
-                        title="Participação",
+                        title="ParticipaÃ§Ã£o",
                     ),
 
                     alt.Tooltip(
@@ -1551,7 +1570,7 @@ if pagina == "Spend & Suppliers":
 
         mapa_hhi = {
             "nao concentrado":
-                "Não concentrado",
+                "NÃ£o concentrado",
 
             "moderadamente concentrado":
                 "Moderado",
@@ -1618,10 +1637,10 @@ if pagina == "Spend & Suppliers":
 
                 color=alt.Color(
                     "status_hhi:N",
-                    title="Concentração",
+                    title="ConcentraÃ§Ã£o",
                     scale=alt.Scale(
                         domain=[
-                            "Não concentrado",
+                            "NÃ£o concentrado",
                             "Moderado",
                             "Altamente concentrado",
                         ],
@@ -1664,7 +1683,7 @@ if pagina == "Spend & Suppliers":
                 ],
             )
             .properties(
-                title="Concentração por categoria",
+                title="ConcentraÃ§Ã£o por categoria",
                 height=300,
             )
         )
@@ -1675,8 +1694,8 @@ if pagina == "Spend & Suppliers":
         )
 
         st.caption(
-            "HHI: <1.500 não concentrado · "
-            "1.500–2.500 moderado · "
+            "HHI: <1.500 nÃ£o concentrado Â· "
+            "1.500â€“2.500 moderado Â· "
             ">2.500 altamente concentrado."
         )
 
@@ -1688,7 +1707,7 @@ if pagina == "Spend & Suppliers":
 
     st.markdown(
         '<div class="pi-section-title">'
-        'Análise de fornecedores por categoria'
+        'AnÃ¡lise de fornecedores por categoria'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -1696,7 +1715,7 @@ if pagina == "Spend & Suppliers":
     st.markdown(
         '<div class="pi-section-subtitle">'
         'Selecione uma categoria para investigar '
-        'dependência, concentração e fornecedores críticos.'
+        'dependÃªncia, concentraÃ§Ã£o e fornecedores crÃ­ticos.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -1838,7 +1857,7 @@ if pagina == "Spend & Suppliers":
     )
 
     cat_cols[3].metric(
-        "Participação do Maior Fornecedor",
+        "ParticipaÃ§Ã£o do Maior Fornecedor",
         (
             f"{top1_share:.1f}%"
             .replace(".", ",")
@@ -1851,7 +1870,7 @@ if pagina == "Spend & Suppliers":
     )
 
     st.caption(
-        f"Status de concentração: {status_hhi}"
+        f"Status de concentraÃ§Ã£o: {status_hhi}"
     )
 
     # ========================================================
@@ -1990,7 +2009,7 @@ if pagina == "Spend & Suppliers":
                 tooltip=[
                     alt.Tooltip(
                         "rank:Q",
-                        title="Posição",
+                        title="PosiÃ§Ã£o",
                     ),
 
                     alt.Tooltip(
@@ -2051,8 +2070,8 @@ if pagina == "Spend & Suppliers":
         )
 
         st.caption(
-            "Classe A: até 80% do spend acumulado · "
-            "Classe B: até 95% · Classe C: restante."
+            "Classe A: atÃ© 80% do spend acumulado Â· "
+            "Classe B: atÃ© 95% Â· Classe C: restante."
         )
 
     # ========================================================
@@ -2240,7 +2259,7 @@ if pagina == "Price Intelligence":
     cols = st.columns(5)
 
     cols[0].metric(
-        "Transações OOT 2026",
+        "TransaÃ§Ãµes OOT 2026",
         f"{n_total:,}".replace(",", "."),
     )
 
@@ -2260,7 +2279,7 @@ if pagina == "Price Intelligence":
     )
 
     cols[4].metric(
-        "Anomaly Rate · Known",
+        "Anomaly Rate Â· Known",
         f"{anomaly_rate:.2f}%".replace(".", ","),
     )
 
@@ -2313,22 +2332,22 @@ if pagina == "Price Intelligence":
 
         f'<p>O modelo avaliou '
         f'<strong>{formatar_inteiro(n_total)}</strong> '
-        f'transações no período OOT de 2026.</p>'
+        f'transaÃ§Ãµes no perÃ­odo OOT de 2026.</p>'
 
         f'<p>Entre os itens conhecidos, o MAE log foi '
         f'<strong>{known_mae_fmt}</strong>. '
         f'Itens unseen representam '
         f'<strong>{unseen_rate_fmt}</strong> '
-        f'da população e são tratados separadamente '
+        f'da populaÃ§Ã£o e sÃ£o tratados separadamente '
         f'na camada de monitoramento.</p>'
 
-        f'<p>O threshold congelado de anomalia é '
-        f'<strong>|log error| ≥ {threshold_fmt}</strong>. '
+        f'<p>O threshold congelado de anomalia Ã© '
+        f'<strong>|log error| â‰¥ {threshold_fmt}</strong>. '
         f'Foram identificadas '
         f'<strong>{formatar_inteiro(n_anomalias)}</strong> '
         f'anomalias entre itens conhecidos, sendo '
         f'<strong>{formatar_inteiro(n_acima)}</strong> '
-        f'acima do preço esperado.</p>'
+        f'acima do preÃ§o esperado.</p>'
 
         '</div>'
     )
@@ -2346,15 +2365,15 @@ if pagina == "Price Intelligence":
 
     st.markdown(
         '<div class="pi-section-title">'
-        'Diagnóstico do modelo'
+        'DiagnÃ³stico do modelo'
         '</div>',
         unsafe_allow_html=True,
     )
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Relação entre preços observados, preços esperados '
-        'e distribuição dos erros OOT.'
+        'RelaÃ§Ã£o entre preÃ§os observados, preÃ§os esperados '
+        'e distribuiÃ§Ã£o dos erros OOT.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -2432,7 +2451,7 @@ if pagina == "Price Intelligence":
             .encode(
                 x=alt.X(
                     "unit_price_pred:Q",
-                    title="Preço esperado",
+                    title="PreÃ§o esperado",
                     scale=alt.Scale(
                         type="log",
                         domain=[
@@ -2448,7 +2467,7 @@ if pagina == "Price Intelligence":
 
                 y=alt.Y(
                     "unit_price:Q",
-                    title="Preço observado",
+                    title="PreÃ§o observado",
                     scale=alt.Scale(
                         type="log",
                         domain=[
@@ -2484,12 +2503,12 @@ if pagina == "Price Intelligence":
                     ),
                     alt.Tooltip(
                         "unit_price:Q",
-                        title="Preço observado",
+                        title="PreÃ§o observado",
                         format=",.2f",
                     ),
                     alt.Tooltip(
                         "unit_price_pred:Q",
-                        title="Preço esperado",
+                        title="PreÃ§o esperado",
                         format=",.2f",
                     ),
                     alt.Tooltip(
@@ -2535,7 +2554,7 @@ if pagina == "Price Intelligence":
             + referencia
         ).properties(
             title=(
-                "Preço observado vs esperado"
+                "PreÃ§o observado vs esperado"
             ),
             height=330,
         )
@@ -2546,8 +2565,8 @@ if pagina == "Price Intelligence":
         )
 
         st.caption(
-            "Escala logarítmica. A linha tracejada "
-            "representa preço observado = preço esperado."
+            "Escala logarÃ­tmica. A linha tracejada "
+            "representa preÃ§o observado = preÃ§o esperado."
         )
 
     # --------------------------------------------------------
@@ -2577,7 +2596,7 @@ if pagina == "Price Intelligence":
 
                 y=alt.Y(
                     "count():Q",
-                    title="Observações",
+                    title="ObservaÃ§Ãµes",
                     axis=alt.Axis(
                         grid=True,
                         gridColor="#EEF0F3",
@@ -2602,7 +2621,7 @@ if pagina == "Price Intelligence":
                 tooltip=[
                     alt.Tooltip(
                         "count():Q",
-                        title="Observações",
+                        title="ObservaÃ§Ãµes",
                     ),
                 ],
             )
@@ -2642,7 +2661,7 @@ if pagina == "Price Intelligence":
         histogram = (
             histogram
             .properties(
-                title="Distribuição dos erros OOT",
+                title="DistribuiÃ§Ã£o dos erros OOT",
                 height=330,
             )
         )
@@ -2656,7 +2675,7 @@ if pagina == "Price Intelligence":
             st.caption(
                 "Linha vermelha tracejada: "
                 "threshold de anomalia congelado "
-                "na validação de 2025."
+                "na validaÃ§Ã£o de 2025."
             )
 
     # ========================================================
@@ -2675,7 +2694,7 @@ if pagina == "Price Intelligence":
     st.markdown(
         '<div class="pi-section-subtitle">'
         'Casos conhecidos que ultrapassaram o threshold '
-        'estatístico calibrado em 2025.'
+        'estatÃ­stico calibrado em 2025.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -2700,7 +2719,7 @@ if pagina == "Price Intelligence":
     }
 
     anomaly_rows[
-        "Direção"
+        "DireÃ§Ã£o"
     ] = (
         anomaly_rows[
             "anomaly_direction"
@@ -2751,7 +2770,7 @@ if pagina == "Price Intelligence":
     # --------------------------------------------------------
 
     filtro_direcao = st.selectbox(
-        "Direção da anomalia",
+        "DireÃ§Ã£o da anomalia",
         [
             "Todas",
             "Acima do esperado",
@@ -2767,7 +2786,7 @@ if pagina == "Price Intelligence":
         anomaly_filtered = (
             anomaly_filtered[
                 anomaly_filtered[
-                    "Direção"
+                    "DireÃ§Ã£o"
                 ]
                 == filtro_direcao
             ]
@@ -2793,7 +2812,7 @@ if pagina == "Price Intelligence":
             "unit_price_pred",
             "price_deviation_pct",
             "abs_log_error",
-            "Direção",
+            "DireÃ§Ã£o",
         ]
         if coluna
         in anomaly_filtered.columns
@@ -2810,10 +2829,10 @@ if pagina == "Price Intelligence":
                     "Item",
 
                 "unit_price":
-                    "Preço observado",
+                    "PreÃ§o observado",
 
                 "unit_price_pred":
-                    "Preço esperado",
+                    "PreÃ§o esperado",
 
                 "price_deviation_pct":
                     "Desvio (%)",
@@ -2829,12 +2848,12 @@ if pagina == "Price Intelligence":
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Preço observado":
+            "PreÃ§o observado":
                 st.column_config.NumberColumn(
                     format="R$ %.2f"
                 ),
 
-            "Preço esperado":
+            "PreÃ§o esperado":
                 st.column_config.NumberColumn(
                     format="R$ %.2f"
                 ),
@@ -2852,10 +2871,10 @@ if pagina == "Price Intelligence":
     )
 
     st.caption(
-        "Anomalia estatística não representa fraude "
-        "ou sobrepreço comprovado. Casos acima do esperado "
+        "Anomalia estatÃ­stica nÃ£o representa fraude "
+        "ou sobrepreÃ§o comprovado. Casos acima do esperado "
         "seguem para a camada de Savings, onde passam por "
-        "regras adicionais de qualidade e confiança."
+        "regras adicionais de qualidade e confianÃ§a."
     )
 
 # ============================================================
@@ -2904,35 +2923,35 @@ if pagina == "Savings Opportunities":
     cols = st.columns(5)
 
     cols[0].metric(
-        "Potential Savings — Alta Confiança",
+        "Potential Savings â€” Alta ConfianÃ§a",
         formatar_brl_compacto(
             savings_alta
         ),
     )
 
     cols[1].metric(
-        "Oportunidades de Alta Confiança",
+        "Oportunidades de Alta ConfianÃ§a",
         formatar_inteiro(
             n_alta
         ),
     )
 
     cols[2].metric(
-        "Alto Valor em Revisão",
+        "Alto Valor em RevisÃ£o",
         formatar_brl_compacto(
             savings_revisao
         ),
     )
 
     cols[3].metric(
-        "Itens em Revisão",
+        "Itens em RevisÃ£o",
         formatar_inteiro(
             n_revisao
         ),
     )
 
     cols[4].metric(
-        "Baixa Confiança",
+        "Baixa ConfianÃ§a",
         formatar_inteiro(
             n_baixa
         ),
@@ -3022,7 +3041,7 @@ if pagina == "Savings Opportunities":
                 </p>
                 <p>
                     A categoria com maior impacto potencial
-                    é
+                    Ã©
                     <strong>{top_categoria}</strong>,
                     com
                     <strong>
@@ -3033,7 +3052,7 @@ if pagina == "Savings Opportunities":
                 </p>
                 <p>
                     O fornecedor com maior oportunidade
-                    agregada de alta confiança é
+                    agregada de alta confianÃ§a Ã©
                     <strong>{top_supplier}</strong>,
                     com
                     <strong>
@@ -3052,16 +3071,16 @@ if pagina == "Savings Opportunities":
         dedent(
             f"""
             <div class="pi-monitoring-note">
-                <strong>Validação manual necessária:</strong>
+                <strong>ValidaÃ§Ã£o manual necessÃ¡ria:</strong>
                 existem
                 <strong>
                     {formatar_brl_compacto(savings_revisao)}
                 </strong>
-                distribuídos em
+                distribuÃ­dos em
                 <strong>{n_revisao}</strong>
                 oportunidades de alto valor que passaram
                 pelas regras de qualidade, mas permanecem
-                fora do KPI principal por exigirem revisão
+                fora do KPI principal por exigirem revisÃ£o
                 adicional.
             </div>
             """
@@ -3075,20 +3094,20 @@ if pagina == "Savings Opportunities":
     )
 
     # ========================================================
-    # VISÃO FINANCEIRA
+    # VISÃƒO FINANCEIRA
     # ========================================================
 
     st.markdown(
         '<div class="pi-section-title">'
-        'Distribuição das oportunidades'
+        'DistribuiÃ§Ã£o das oportunidades'
         '</div>',
         unsafe_allow_html=True,
     )
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Impacto financeiro por categoria, confiança '
-        'e prioridade de atuação.'
+        'Impacto financeiro por categoria, confianÃ§a '
+        'e prioridade de atuaÃ§Ã£o.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -3191,7 +3210,7 @@ if pagina == "Savings Opportunities":
 
                 color=alt.Color(
                     "confidence_label:N",
-                    title="Confiança",
+                    title="ConfianÃ§a",
                     scale=alt.Scale(
                         domain=[
                             "High Confidence",
@@ -3212,7 +3231,7 @@ if pagina == "Savings Opportunities":
 
                     alt.Tooltip(
                         "confidence_label:N",
-                        title="Confiança",
+                        title="ConfianÃ§a",
                     ),
 
                     alt.Tooltip(
@@ -3273,7 +3292,7 @@ if pagina == "Savings Opportunities":
                 "Alta",
 
             "Media":
-                "Média",
+                "MÃ©dia",
 
             "Baixa":
                 "Baixa",
@@ -3331,7 +3350,7 @@ if pagina == "Savings Opportunities":
                     title=None,
                     sort=[
                         "Alta",
-                        "Média",
+                        "MÃ©dia",
                         "Baixa",
                     ],
                     axis=alt.Axis(
@@ -3347,7 +3366,7 @@ if pagina == "Savings Opportunities":
                     scale=alt.Scale(
                         domain=[
                             "Alta",
-                            "Média",
+                            "MÃ©dia",
                             "Baixa",
                         ],
                         range=[
@@ -3390,7 +3409,7 @@ if pagina == "Savings Opportunities":
         )
 
     # ========================================================
-    # FILTROS / FILA DE DECISÃO
+    # FILTROS / FILA DE DECISÃƒO
     # ========================================================
 
     st.markdown(
@@ -3407,8 +3426,8 @@ if pagina == "Savings Opportunities":
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Fila priorizada para investigação, negociação '
-        'ou validação manual.'
+        'Fila priorizada para investigaÃ§Ã£o, negociaÃ§Ã£o '
+        'ou validaÃ§Ã£o manual.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -3426,7 +3445,7 @@ if pagina == "Savings Opportunities":
         ]
 
         confidence_selected = st.multiselect(
-            "Confiança",
+            "ConfianÃ§a",
             confidence_options,
             default=[
                 "Alta",
@@ -3553,7 +3572,7 @@ if pagina == "Savings Opportunities":
         impacto_medio = 0.0
 
     resumo_cols[2].metric(
-        "Impacto Médio",
+        "Impacto MÃ©dio",
         formatar_brl_compacto(
             impacto_medio
         ),
@@ -3579,7 +3598,7 @@ if pagina == "Savings Opportunities":
             "Alta",
 
         "Media":
-            "Média",
+            "MÃ©dia",
 
         "Baixa":
             "Baixa",
@@ -3588,7 +3607,7 @@ if pagina == "Savings Opportunities":
     tabela = filtered.copy()
 
     tabela[
-        "Confiança"
+        "ConfianÃ§a"
     ] = (
         tabela[
             "confidence_tier"
@@ -3616,7 +3635,7 @@ if pagina == "Savings Opportunities":
 
     colunas_tabela = [
         "Prioridade",
-        "Confiança",
+        "ConfianÃ§a",
         "nome_fornecedor",
         "categoria_relevante",
         "descricao_resumida_amostra",
@@ -3642,13 +3661,13 @@ if pagina == "Savings Opportunities":
                     "Categoria",
 
                 "descricao_resumida_amostra":
-                    "Descrição",
+                    "DescriÃ§Ã£o",
 
                 "unit_price":
-                    "Preço observado",
+                    "PreÃ§o observado",
 
                 "preco_esperado":
-                    "Preço esperado",
+                    "PreÃ§o esperado",
 
                 "quantity":
                     "Quantidade",
@@ -3660,7 +3679,7 @@ if pagina == "Savings Opportunities":
                     "Impacto potencial",
 
                 "n_historico":
-                    "Histórico",
+                    "HistÃ³rico",
             }
         )
     )
@@ -3670,12 +3689,12 @@ if pagina == "Savings Opportunities":
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Preço observado":
+            "PreÃ§o observado":
                 st.column_config.NumberColumn(
                     format="R$ %.2f"
                 ),
 
-            "Preço esperado":
+            "PreÃ§o esperado":
                 st.column_config.NumberColumn(
                     format="R$ %.2f"
                 ),
@@ -3695,7 +3714,7 @@ if pagina == "Savings Opportunities":
                     format="R$ %.2f"
                 ),
 
-            "Histórico":
+            "HistÃ³rico":
                 st.column_config.NumberColumn(
                     format="%d"
                 ),
@@ -3703,41 +3722,41 @@ if pagina == "Savings Opportunities":
     )
 
     st.caption(
-        "Potential Savings é um indicador de priorização "
-        "para revisão e negociação. Não representa economia "
-        "garantida, fraude ou sobrepreço comprovado."
+        "Potential Savings Ã© um indicador de priorizaÃ§Ã£o "
+        "para revisÃ£o e negociaÃ§Ã£o. NÃ£o representa economia "
+        "garantida, fraude ou sobrepreÃ§o comprovado."
     )
 
     # ========================================================
-    # LOW CONFIDENCE — DIAGNOSTICO
+    # LOW CONFIDENCE â€” DIAGNOSTICO
     # ========================================================
 
     with st.expander(
-        "Por que existem oportunidades de baixa confiança?"
+        "Por que existem oportunidades de baixa confianÃ§a?"
     ):
 
         st.write(
             "Oportunidades classificadas como Low Confidence "
-            "permanecem disponíveis para diagnóstico, mas "
-            "não entram nos KPIs executivos."
+            "permanecem disponÃ­veis para diagnÃ³stico, mas "
+            "nÃ£o entram nos KPIs executivos."
         )
 
         low_flags = {
-            "Unidade não comparável":
+            "Unidade nÃ£o comparÃ¡vel":
                 int(
                     baixa[
                         "flag_unidade_nao_comparavel"
                     ].fillna(False).sum()
                 ),
 
-            "Pouco histórico":
+            "Pouco histÃ³rico":
                 int(
                     baixa[
                         "flag_pouco_historico"
                     ].fillna(False).sum()
                 ),
 
-            "Inconsistência de total":
+            "InconsistÃªncia de total":
                 int(
                     baixa[
                         "flag_inconsistencia_total"
@@ -3929,13 +3948,13 @@ if pagina == "Model Monitoring":
     cols = st.columns(6)
 
     cols[0].metric(
-        "MAE log · 2025",
+        "MAE log Â· 2025",
         f"{mae_2025:.4f}"
         .replace(".", ","),
     )
 
     cols[1].metric(
-        "MAE log · OOT 2026",
+        "MAE log Â· OOT 2026",
         f"{mae_2026:.4f}"
         .replace(".", ","),
         delta=(
@@ -3946,13 +3965,13 @@ if pagina == "Model Monitoring":
     )
 
     cols[2].metric(
-        "Known MAE · 2026",
+        "Known MAE Â· 2026",
         f"{known_mae_2026:.4f}"
         .replace(".", ","),
     )
 
     cols[3].metric(
-        "Unseen Rate · 2026",
+        "Unseen Rate Â· 2026",
         (
             f"{unseen_rate_2026:.2f}%"
             .replace(".", ",")
@@ -3965,7 +3984,7 @@ if pagina == "Model Monitoring":
     )
 
     cols[4].metric(
-        "Anomaly Rate · 2026",
+        "Anomaly Rate Â· 2026",
         (
             f"{anomaly_rate_2026:.2f}%"
             .replace(".", ",")
@@ -4067,16 +4086,16 @@ if pagina == "Model Monitoring":
         f'<p>O MAE log global passou de '
         f'<strong>{mae_2025_fmt}</strong> para '
         f'<strong>{mae_2026_fmt}</strong>, '
-        f'uma variação de '
+        f'uma variaÃ§Ã£o de '
         f'<strong>{mae_delta_fmt}%</strong>.</p>'
 
         f'<p>Entre itens conhecidos, o MAE permaneceu '
-        f'praticamente estável: '
+        f'praticamente estÃ¡vel: '
         f'<strong>{known_mae_2025_fmt}</strong> em 2025 versus '
         f'<strong>{known_mae_2026_fmt}</strong> em 2026 '
         f'(<strong>{known_delta_fmt}%</strong>).</p>'
 
-        f'<p>O principal sinal de mudança está no mix: '
+        f'<p>O principal sinal de mudanÃ§a estÃ¡ no mix: '
         f'itens unseen passaram de '
         f'<strong>{unseen_rate_2025_fmt}%</strong> para '
         f'<strong>{unseen_rate_2026_fmt}%</strong>, '
@@ -4084,7 +4103,7 @@ if pagina == "Model Monitoring":
         f'<strong>{unseen_delta_fmt} p.p.</strong>.</p>'
 
         f'<p>A taxa de anomalias conhecidas permaneceu '
-        f'próxima da calibração: '
+        f'prÃ³xima da calibraÃ§Ã£o: '
         f'<strong>{anomaly_rate_2025_fmt}%</strong> em 2025 versus '
         f'<strong>{anomaly_rate_2026_fmt}%</strong> em 2026 '
         f'(<strong>{anomaly_delta_fmt} p.p.</strong>).</p>'
@@ -4101,13 +4120,13 @@ if pagina == "Model Monitoring":
         dedent(
             """
             <div class="pi-monitoring-note">
-                <strong>Nota metodológica:</strong>
-                a validação de 2025 utiliza o LightGBM
+                <strong>Nota metodolÃ³gica:</strong>
+                a validaÃ§Ã£o de 2025 utiliza o LightGBM
                 treinado em 2024, enquanto o teste OOT 2026
                 utiliza o modelo final treinado em
-                2024 + 2025. Portanto, a comparação abaixo
+                2024 + 2025. Portanto, a comparaÃ§Ã£o abaixo
                 representa estabilidade temporal operacional,
-                não uma estimativa causal pura de model drift.
+                nÃ£o uma estimativa causal pura de model drift.
             </div>
             """
         ).strip(),
@@ -4132,7 +4151,7 @@ if pagina == "Model Monitoring":
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Performance mensal e evolução da incidência '
+        'Performance mensal e evoluÃ§Ã£o da incidÃªncia '
         'de itens unseen.'
         '</div>',
         unsafe_allow_html=True,
@@ -4186,12 +4205,12 @@ if pagina == "Model Monitoring":
                 tooltip=[
                     alt.Tooltip(
                         "mes:N",
-                        title="Mês",
+                        title="MÃªs",
                     ),
 
                     alt.Tooltip(
                         "n:Q",
-                        title="Observações",
+                        title="ObservaÃ§Ãµes",
                     ),
 
                     alt.Tooltip(
@@ -4262,12 +4281,12 @@ if pagina == "Model Monitoring":
                 tooltip=[
                     alt.Tooltip(
                         "mes:N",
-                        title="Mês",
+                        title="MÃªs",
                     ),
 
                     alt.Tooltip(
                         "n:Q",
-                        title="Observações",
+                        title="ObservaÃ§Ãµes",
                     ),
 
                     alt.Tooltip(
@@ -4312,7 +4331,7 @@ if pagina == "Model Monitoring":
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Separação entre itens com histórico conhecido '
+        'SeparaÃ§Ã£o entre itens com histÃ³rico conhecido '
         'e casos de cold start.'
         '</div>',
         unsafe_allow_html=True,
@@ -4368,7 +4387,7 @@ if pagina == "Model Monitoring":
 
             color=alt.Color(
                 "Ano:N",
-                title="Período",
+                title="PerÃ­odo",
                 scale=alt.Scale(
                     domain=[
                         "2025",
@@ -4394,7 +4413,7 @@ if pagina == "Model Monitoring":
 
                 alt.Tooltip(
                     "n:Q",
-                    title="Observações",
+                    title="ObservaÃ§Ãµes",
                 ),
 
                 alt.Tooltip(
@@ -4428,8 +4447,8 @@ if pagina == "Model Monitoring":
 
     st.caption(
         "Itens unseen apresentam erro superior aos itens "
-        "known. O aumento da participação unseen em 2026 "
-        "é relevante para a leitura da performance global."
+        "known. O aumento da participaÃ§Ã£o unseen em 2026 "
+        "Ã© relevante para a leitura da performance global."
     )
 
     # ========================================================
@@ -4450,8 +4469,8 @@ if pagina == "Model Monitoring":
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Comparação de erro e mudança no mix entre '
-        'validação 2025 e OOT 2026.'
+        'ComparaÃ§Ã£o de erro e mudanÃ§a no mix entre '
+        'validaÃ§Ã£o 2025 e OOT 2026.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -4539,7 +4558,7 @@ if pagina == "Model Monitoring":
 
                 color=alt.Color(
                     "Periodo:N",
-                    title="Período",
+                    title="PerÃ­odo",
                     scale=alt.Scale(
                         domain=[
                             "2025",
@@ -4560,7 +4579,7 @@ if pagina == "Model Monitoring":
 
                     alt.Tooltip(
                         "Periodo:N",
-                        title="Período",
+                        title="PerÃ­odo",
                     ),
 
                     alt.Tooltip(
@@ -4597,7 +4616,7 @@ if pagina == "Model Monitoring":
         )
 
         mix_plot[
-            "Direção"
+            "DireÃ§Ã£o"
         ] = (
             mix_plot[
                 "delta_pp"
@@ -4606,7 +4625,7 @@ if pagina == "Model Monitoring":
                 lambda x:
                     "Aumento"
                     if x >= 0
-                    else "Redução"
+                    else "ReduÃ§Ã£o"
             )
         )
 
@@ -4621,7 +4640,7 @@ if pagina == "Model Monitoring":
                 x=alt.X(
                     "delta_pp:Q",
                     title=(
-                        "Mudança de participação (p.p.)"
+                        "MudanÃ§a de participaÃ§Ã£o (p.p.)"
                     ),
                     axis=alt.Axis(
                         grid=True,
@@ -4644,12 +4663,12 @@ if pagina == "Model Monitoring":
                 ),
 
                 color=alt.Color(
-                    "Direção:N",
+                    "DireÃ§Ã£o:N",
                     title=None,
                     scale=alt.Scale(
                         domain=[
                             "Aumento",
-                            "Redução",
+                            "ReduÃ§Ã£o",
                         ],
                         range=[
                             "#C9851A",
@@ -4678,13 +4697,13 @@ if pagina == "Model Monitoring":
 
                     alt.Tooltip(
                         "delta_pp:Q",
-                        title="Δ p.p.",
+                        title="Î” p.p.",
                         format="+.2f",
                     ),
                 ],
             )
             .properties(
-                title="Mudança no mix de categorias",
+                title="MudanÃ§a no mix de categorias",
                 height=330,
             )
         )
@@ -4812,8 +4831,8 @@ if pagina == "Methodology":
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Da aquisição dos dados públicos à geração de '
-        'oportunidades acionáveis de Procurement.'
+        'Da aquisiÃ§Ã£o dos dados pÃºblicos Ã  geraÃ§Ã£o de '
+        'oportunidades acionÃ¡veis de Procurement.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -4830,7 +4849,7 @@ if pagina == "Methodology":
                 '<div class="pi-method-kicker">Fonte</div>'
                 '<div class="pi-method-title">PNCP</div>'
                 '<div class="pi-method-text">'
-                'Dados públicos de compras utilizados para '
+                'Dados pÃºblicos de compras utilizados para '
                 'construir uma plataforma demonstrativa de '
                 'Procurement Intelligence.'
                 '</div>'
@@ -4846,13 +4865,13 @@ if pagina == "Methodology":
                 '<div class="pi-method-card">'
                 '<div class="pi-method-kicker">Objetivo</div>'
                 '<div class="pi-method-title">'
-                'Inteligência de Compras'
+                'InteligÃªncia de Compras'
                 '</div>'
                 '<div class="pi-method-text">'
                 'Combinar Spend Analytics, Supplier '
                 'Concentration, Machine Learning e Savings '
-                'Prioritization para apoiar investigação '
-                'e tomada de decisão.'
+                'Prioritization para apoiar investigaÃ§Ã£o '
+                'e tomada de decisÃ£o.'
                 '</div>'
                 '</div>'
             ),
@@ -4870,8 +4889,8 @@ if pagina == "Methodology":
                 '</div>'
                 '<div class="pi-method-text">'
                 'Os resultados priorizam onde investigar, '
-                'negociar ou revisar. O sistema não determina '
-                'automaticamente fraude ou sobrepreço.'
+                'negociar ou revisar. O sistema nÃ£o determina '
+                'automaticamente fraude ou sobrepreÃ§o.'
                 '</div>'
                 '</div>'
             ),
@@ -4896,8 +4915,8 @@ if pagina == "Methodology":
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Separação entre ingestão, transformação, analytics '
-        'e camada de apresentação.'
+        'SeparaÃ§Ã£o entre ingestÃ£o, transformaÃ§Ã£o, analytics '
+        'e camada de apresentaÃ§Ã£o.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -4907,38 +4926,38 @@ if pagina == "Methodology":
 
         '<div class="pi-flow-step">'
         '<strong>PNCP</strong>'
-        '<span>Fonte pública</span>'
+        '<span>Fonte pÃºblica</span>'
         '</div>'
 
-        '<div class="pi-flow-arrow">→</div>'
+        '<div class="pi-flow-arrow">â†’</div>'
 
         '<div class="pi-flow-step">'
         '<strong>Bronze</strong>'
         '<span>Dados brutos</span>'
         '</div>'
 
-        '<div class="pi-flow-arrow">→</div>'
+        '<div class="pi-flow-arrow">â†’</div>'
 
         '<div class="pi-flow-step">'
         '<strong>Silver</strong>'
         '<span>Limpeza e regras</span>'
         '</div>'
 
-        '<div class="pi-flow-arrow">→</div>'
+        '<div class="pi-flow-arrow">â†’</div>'
 
         '<div class="pi-flow-step">'
         '<strong>Gold</strong>'
-        '<span>Modelo analítico</span>'
+        '<span>Modelo analÃ­tico</span>'
         '</div>'
 
-        '<div class="pi-flow-arrow">→</div>'
+        '<div class="pi-flow-arrow">â†’</div>'
 
         '<div class="pi-flow-step">'
         '<strong>Analytics</strong>'
         '<span>Spend + ML + Savings</span>'
         '</div>'
 
-        '<div class="pi-flow-arrow">→</div>'
+        '<div class="pi-flow-arrow">â†’</div>'
 
         '<div class="pi-flow-step">'
         '<strong>Streamlit</strong>'
@@ -4955,8 +4974,8 @@ if pagina == "Methodology":
 
     st.caption(
         "O dashboard consome artefatos previamente "
-        "calculados e validados. Nenhum modelo é treinado "
-        "durante a execução do Streamlit."
+        "calculados e validados. Nenhum modelo Ã© treinado "
+        "durante a execuÃ§Ã£o do Streamlit."
     )
 
     # ========================================================
@@ -4970,15 +4989,15 @@ if pagina == "Methodology":
 
     st.markdown(
         '<div class="pi-section-title">'
-        'Validação temporal'
+        'ValidaÃ§Ã£o temporal'
         '</div>',
         unsafe_allow_html=True,
     )
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Separação cronológica para evitar seleção de modelo '
-        'utilizando informação do período final de teste.'
+        'SeparaÃ§Ã£o cronolÃ³gica para evitar seleÃ§Ã£o de modelo '
+        'utilizando informaÃ§Ã£o do perÃ­odo final de teste.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -4997,7 +5016,7 @@ if pagina == "Methodology":
                 'Development Train'
                 '</div>'
                 '<div class="pi-method-text">'
-                '<strong>46.143 transações</strong><br>'
+                '<strong>46.143 transaÃ§Ãµes</strong><br>'
                 'Treinamento inicial dos modelos candidatos.'
                 '</div>'
                 '</div>'
@@ -5015,9 +5034,9 @@ if pagina == "Methodology":
                 'Validation / Selection'
                 '</div>'
                 '<div class="pi-method-text">'
-                '<strong>57.452 transações</strong><br>'
-                'Seleção do algoritmo, bootstrap, tuning e '
-                'calibração do threshold de anomalia.'
+                '<strong>57.452 transaÃ§Ãµes</strong><br>'
+                'SeleÃ§Ã£o do algoritmo, bootstrap, tuning e '
+                'calibraÃ§Ã£o do threshold de anomalia.'
                 '</div>'
                 '</div>'
             ),
@@ -5034,9 +5053,9 @@ if pagina == "Methodology":
                 'Final OOT Test'
                 '</div>'
                 '<div class="pi-method-text">'
-                '<strong>24.692 transações</strong><br>'
-                'Avaliação final do modelo congelado, '
-                'sem nova seleção ou tuning.'
+                '<strong>24.692 transaÃ§Ãµes</strong><br>'
+                'AvaliaÃ§Ã£o final do modelo congelado, '
+                'sem nova seleÃ§Ã£o ou tuning.'
                 '</div>'
                 '</div>'
             ),
@@ -5061,8 +5080,8 @@ if pagina == "Methodology":
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Comparação de diferentes famílias de modelos antes '
-        'da escolha da solução final.'
+        'ComparaÃ§Ã£o de diferentes famÃ­lias de modelos antes '
+        'da escolha da soluÃ§Ã£o final.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -5084,7 +5103,7 @@ if pagina == "Methodology":
                 "Modelo selecionado",
             ],
             "Resultado": [
-                "Referência",
+                "ReferÃªncia",
                 "Superado",
                 "Superado",
                 "Runner-up",
@@ -5109,14 +5128,14 @@ if pagina == "Methodology":
             (
                 '<div class="pi-method-card">'
                 '<div class="pi-method-kicker">'
-                'Critério principal'
+                'CritÃ©rio principal'
                 '</div>'
                 '<div class="pi-method-title">'
                 'Performance Out-of-Time'
                 '</div>'
                 '<div class="pi-method-text">'
-                'A escolha utilizou MAE em log no período '
-                'de validação, complementado por métricas '
+                'A escolha utilizou MAE em log no perÃ­odo '
+                'de validaÃ§Ã£o, complementado por mÃ©tricas '
                 'como RMSE, MedAPE e WAPE.'
                 '</div>'
                 '</div>'
@@ -5137,7 +5156,7 @@ if pagina == "Methodology":
                 '</div>'
                 '<div class="pi-method-text">'
                 'Os erros dos modelos foram comparados nas '
-                'mesmas observações, com bootstrap agrupado '
+                'mesmas observaÃ§Ãµes, com bootstrap agrupado '
                 'por item_key.'
                 '</div>'
                 '</div>'
@@ -5147,16 +5166,16 @@ if pagina == "Methodology":
 
     st.info(
         "LightGBM e XGBoost ficaram estatisticamente "
-        "indistinguíveis no bootstrap final de seleção. "
-        "LightGBM foi mantido pelo menor MAE primário, "
-        "melhor comportamento em unseen e integração "
-        "já existente no pipeline."
+        "indistinguÃ­veis no bootstrap final de seleÃ§Ã£o. "
+        "LightGBM foi mantido pelo menor MAE primÃ¡rio, "
+        "melhor comportamento em unseen e integraÃ§Ã£o "
+        "jÃ¡ existente no pipeline."
     )
 
     st.caption(
-        "O tuning posterior não produziu melhoria "
-        "estatisticamente demonstrável; por parcimônia, "
-        "a configuração LightGBM v0 foi preservada."
+        "O tuning posterior nÃ£o produziu melhoria "
+        "estatisticamente demonstrÃ¡vel; por parcimÃ´nia, "
+        "a configuraÃ§Ã£o LightGBM v0 foi preservada."
     )
 
     # ========================================================
@@ -5204,7 +5223,7 @@ if pagina == "Methodology":
     oot_cols = st.columns(4)
 
     oot_cols[0].metric(
-        "Observações",
+        "ObservaÃ§Ãµes",
         f"{len(oot_errors):,}".replace(",", "."),
     )
 
@@ -5234,14 +5253,14 @@ if pagina == "Methodology":
 
     st.markdown(
         '<div class="pi-section-title">'
-        'Da anomalia à oportunidade'
+        'Da anomalia Ã  oportunidade'
         '</div>',
         unsafe_allow_html=True,
     )
 
     st.markdown(
         '<div class="pi-section-subtitle">'
-        'Uma anomalia estatística não se transforma '
+        'Uma anomalia estatÃ­stica nÃ£o se transforma '
         'automaticamente em Savings.'
         '</div>',
         unsafe_allow_html=True,
@@ -5280,39 +5299,39 @@ if pagina == "Methodology":
 
         '<div class="pi-flow-step">'
         '<strong>Prediction</strong>'
-        '<span>Preço esperado</span>'
+        '<span>PreÃ§o esperado</span>'
         '</div>'
 
-        '<div class="pi-flow-arrow">→</div>'
+        '<div class="pi-flow-arrow">â†’</div>'
 
         '<div class="pi-flow-step">'
         '<strong>Anomaly</strong>'
-        f'<span>|erro log| ≥ '
+        f'<span>|erro log| â‰¥ '
         f'{formatar_decimal(anomaly_threshold, 3)}</span>'
         '</div>'
 
-        '<div class="pi-flow-arrow">→</div>'
+        '<div class="pi-flow-arrow">â†’</div>'
 
         '<div class="pi-flow-step">'
         '<strong>Direction</strong>'
         '<span>Acima do esperado</span>'
         '</div>'
 
-        '<div class="pi-flow-arrow">→</div>'
+        '<div class="pi-flow-arrow">â†’</div>'
 
         '<div class="pi-flow-step">'
         '<strong>Quality Audit</strong>'
-        '<span>Unidade + histórico + consistência</span>'
+        '<span>Unidade + histÃ³rico + consistÃªncia</span>'
         '</div>'
 
-        '<div class="pi-flow-arrow">→</div>'
+        '<div class="pi-flow-arrow">â†’</div>'
 
         '<div class="pi-flow-step">'
         '<strong>Confidence Tier</strong>'
         '<span>Alta / Review / Baixa</span>'
         '</div>'
 
-        '<div class="pi-flow-arrow">→</div>'
+        '<div class="pi-flow-arrow">â†’</div>'
 
         '<div class="pi-flow-step">'
         '<strong>Procurement</strong>'
@@ -5358,8 +5377,8 @@ if pagina == "Methodology":
     )
 
     st.caption(
-        "Potential Savings = max(preço observado − preço "
-        "esperado, 0) × quantidade."
+        "Potential Savings = max(preÃ§o observado âˆ’ preÃ§o "
+        "esperado, 0) Ã— quantidade."
     )
 
     # ========================================================
@@ -5373,7 +5392,7 @@ if pagina == "Methodology":
 
     st.markdown(
         '<div class="pi-section-title">'
-        'Limitações e governança'
+        'LimitaÃ§Ãµes e governanÃ§a'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -5389,10 +5408,10 @@ if pagina == "Methodology":
                 '<div class="pi-method-warning">'
                 '<strong>Proxy de Procurement</strong><br>'
                 'Os dados do PNCP representam compras '
-                'públicas. Eles são utilizados para '
-                'demonstrar técnicas aplicáveis a Procurement '
-                'Intelligence e não representam processos '
-                'ou dados reais de compras bancárias.'
+                'pÃºblicas. Eles sÃ£o utilizados para '
+                'demonstrar tÃ©cnicas aplicÃ¡veis a Procurement '
+                'Intelligence e nÃ£o representam processos '
+                'ou dados reais de compras bancÃ¡rias.'
                 '</div>'
             ),
             unsafe_allow_html=True,
@@ -5404,10 +5423,10 @@ if pagina == "Methodology":
             (
                 '<div class="pi-method-warning">'
                 '<strong>Decision Support</strong><br>'
-                'Anomalia estatística ou Potential Savings '
-                'não constitui fraude, irregularidade, '
-                'sobrepreço comprovado ou economia garantida. '
-                'A decisão final exige revisão humana.'
+                'Anomalia estatÃ­stica ou Potential Savings '
+                'nÃ£o constitui fraude, irregularidade, '
+                'sobrepreÃ§o comprovado ou economia garantida. '
+                'A decisÃ£o final exige revisÃ£o humana.'
                 '</div>'
             ),
             unsafe_allow_html=True,
@@ -5423,7 +5442,7 @@ if pagina == "Methodology":
     # ========================================================
 
     with st.expander(
-        "Stack técnica e componentes"
+        "Stack tÃ©cnica e componentes"
     ):
 
         stack_df = pd.DataFrame(
@@ -5436,13 +5455,13 @@ if pagina == "Methodology":
                     "Dashboard",
                     "Quality",
                 ],
-                "Tecnologias / Técnicas": [
-                    "Python · ETL · Bronze / Silver / Gold",
-                    "Pandas · Spend Analytics · HHI · ABC",
-                    "LightGBM · XGBoost · CatBoost · Ridge",
-                    "Temporal OOT · Clustered Bootstrap",
-                    "Streamlit · Altair · CSS",
-                    "Pytest · Data Quality · Audit Flags",
+                "Tecnologias / TÃ©cnicas": [
+                    "Python Â· ETL Â· Bronze / Silver / Gold",
+                    "Pandas Â· Spend Analytics Â· HHI Â· ABC",
+                    "LightGBM Â· XGBoost Â· CatBoost Â· Ridge",
+                    "Temporal OOT Â· Clustered Bootstrap",
+                    "Streamlit Â· Altair Â· CSS",
+                    "Pytest Â· Data Quality Â· Audit Flags",
                 ],
             }
         )
