@@ -1,4 +1,5 @@
 """Pagina: savings_opportunities. Extraido de app/dashboard.py na Fase 15.5."""
+from textwrap import dedent
 import streamlit as st
 import pandas as pd
 import altair as alt
