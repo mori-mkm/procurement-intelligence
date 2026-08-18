@@ -42,6 +42,11 @@ ARTIFACT_FILES = {
     "distribution_drift": "drift_distribution_2025_vs_2026.csv",
     "monthly_2026": "stability_monthly_2026.csv",
     "stability_summary": "stability_drift_2026_summary.json",
+    # -----------------------------------------------------
+    # Spend / HHI (Fase 15.3)
+    # -----------------------------------------------------
+    "spend_by_category": "spend_by_category.parquet",
+    "hhi_by_category": "hhi_by_category.parquet",
 }
 
 
@@ -166,5 +171,14 @@ def load_dashboard_artifacts(
 
         "stability_summary": _read_json(
             paths["stability_summary"]
+        ),
+        # -----------------------------------------------------
+        # Spend / HHI (Fase 15.3)
+        # -----------------------------------------------------
+        "spend_by_category": pd.read_parquet(
+            paths["spend_by_category"]
+        ),
+        "hhi_by_category": pd.read_parquet(
+            paths["hhi_by_category"]
         ),
     }

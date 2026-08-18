@@ -25,6 +25,8 @@ def _criar_artefatos_fake(tmp_path):
         "oot_errors",
         "anomalies_2026",
         "savings",
+        "spend_by_category",
+        "hhi_by_category",
     }
 
     json_files = {
