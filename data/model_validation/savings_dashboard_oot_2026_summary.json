@@ -1,0 +1,15 @@
+{
+  "dashboard_kpis": {
+    "potential_savings_high_confidence": 15009053.667012693,
+    "n_high_confidence": 13,
+    "potential_savings_high_value_review": 63897352.05726072,
+    "n_high_value_review": 27,
+    "n_low_confidence": 454
+  },
+  "definitions": {
+    "Alta": "Unidade comparavel, historico suficiente, sem inconsistencias, sem conflito e sem flag de ticket alto.",
+    "Revisao Alto Valor": "Qualidade adequada, mas ticket alto exige validacao manual.",
+    "Baixa": "Possui problema de comparabilidade, pouco historico, inconsistencias ou conflito."
+  },
+  "warning": "Potential Savings e indicador de priorizacao. Nao representa economia garantida, fraude ou sobrepreco comprovado."
+}

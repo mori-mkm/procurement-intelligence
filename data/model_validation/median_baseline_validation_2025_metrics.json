@@ -1,0 +1,14 @@
+{
+  "n_transacoes": 45912,
+  "mae_log": 1.6505633926725856,
+  "rmse_log": 2.493216684395226,
+  "medape": 78.32635185185185,
+  "wape": 99.89466070455632,
+  "mae": 41696.92750635346,
+  "rmse": 284418.84248871217,
+  "known_item_rate": 100.0,
+  "unseen_item_rate": 0.0,
+  "n_transacoes_total_validacao": 57452,
+  "n_transacoes_com_baseline": 45912,
+  "pct_cobertura": 79.91366706119891
+}

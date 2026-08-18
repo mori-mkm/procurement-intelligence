@@ -1,0 +1,33 @@
+{
+  "interpretation": "Potential Savings Opportunity e um indicador para priorizacao de revisao e negociacao. Nao representa fraude, sobrepreco comprovado ou economia garantida.",
+  "methodology": {
+    "anomaly_threshold_calibration": "2025 validation",
+    "test_period": "2026 OOT",
+    "known_only": true,
+    "direction": "acima_do_esperado",
+    "formula": "max(unit_price - expected_price, 0) * quantity"
+  },
+  "summary": {
+    "savings_potencial_total": 905541116.72,
+    "savings_potencial_excluindo_ticket_alto": 210525108.65,
+    "n_oportunidades_total": 494,
+    "n_oportunidades_ticket_alto_cautela": 291
+  },
+  "priority": [
+    {
+      "priority": "Alta",
+      "n_oportunidades": 164,
+      "potential_saving": 633998954.7386386
+    },
+    {
+      "priority": "Media",
+      "n_oportunidades": 107,
+      "potential_saving": 182060326.1874198
+    },
+    {
+      "priority": "Baixa",
+      "n_oportunidades": 223,
+      "potential_saving": 89481835.78950532
+    }
+  ]
+}

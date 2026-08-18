@@ -1,0 +1,49 @@
+{
+  "protocol": {
+    "development_train": 2024,
+    "validation_model_selection": 2025,
+    "final_train": "2024+2025",
+    "final_test": 2026,
+    "model": "LightGBM_v0",
+    "retuning_after_test_allowed": false
+  },
+  "sample_sizes": {
+    "train_2024": 46143,
+    "validation_2025": 57452,
+    "final_train_2024_2025": 103595,
+    "test_2026": 24692
+  },
+  "overall": {
+    "n_transacoes": 24692,
+    "mae_log": 1.2357687609257437,
+    "rmse_log": 1.7136413958507801,
+    "medape": 74.8593334744355,
+    "wape": 93.77467585190612,
+    "mae": 44237.030528338284,
+    "rmse": 320576.7069424711,
+    "known_item_rate": 78.4019115502997,
+    "unseen_item_rate": 21.59808844970031
+  },
+  "known_items": {
+    "n_transacoes": 19359,
+    "mae_log": 1.117388358986822,
+    "rmse_log": 1.5323054615646878,
+    "medape": 69.58474367881473,
+    "wape": 93.13629061624512,
+    "mae": 47963.77788673763,
+    "rmse": 337298.0338480535,
+    "known_item_rate": 100.0,
+    "unseen_item_rate": 0.0
+  },
+  "unseen_items": {
+    "n_transacoes": 5333,
+    "mae_log": 1.6654942814837015,
+    "rmse_log": 2.252383785528738,
+    "medape": 92.02434285307035,
+    "wape": 97.56630413039105,
+    "mae": 30708.790867499578,
+    "rmse": 250673.16715082704,
+    "known_item_rate": 0.0,
+    "unseen_item_rate": 100.0
+  }
+}

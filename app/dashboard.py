@@ -1,4 +1,4 @@
-﻿"""
+"""
 Dashboard Streamlit - Procurement Intelligence Platform.
 
 Fase 14:
@@ -739,13 +739,9 @@ if pagina == "Executive Overview":
         .notna()
     ].copy()
 
-    spend_relevante = compute_spend_by_category(
-        fact_relevante
-    )
+    spend_relevante = dados["spend_by_category"]
 
-    hhi_relevante = compute_hhi_by_category(
-        fact_relevante
-    )
+    hhi_relevante = dados["hhi_by_category"]
 
     fornecedores_relevantes = (
         build_supplier_abc_curve(
@@ -1346,13 +1342,9 @@ if pagina == "Spend & Suppliers":
     # Analises globais
     # --------------------------------------------------------
 
-    spend_cat = compute_spend_by_category(
-        fact_relevante
-    )
+    spend_cat = dados["spend_by_category"]
 
-    hhi_cat = compute_hhi_by_category(
-        fact_relevante
-    )
+    hhi_cat = dados["hhi_by_category"]
 
     abc_global = build_supplier_abc_curve(
         fact_relevante

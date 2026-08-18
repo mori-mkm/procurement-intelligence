@@ -1,0 +1,15 @@
+{
+  "interpretation_note": "2025 e 2026 usam modelos treinados em janelas diferentes; a comparacao de performance mede estabilidade temporal e nao deve ser interpretada como estimativa causal pura de drift.",
+  "mae_log_2025": 1.2142584300487158,
+  "mae_log_2026": 1.2357687609257437,
+  "mae_log_delta_pct": 1.771478817418215,
+  "known_item_rate_2025": 83.78124347281208,
+  "known_item_rate_2026": 78.4019115502997,
+  "unseen_item_rate_2025": 16.218756527187914,
+  "unseen_item_rate_2026": 21.59808844970031,
+  "category_mix_tvd_pct": 2.7673912031583825,
+  "largest_category_mix_shift": {
+    "categoria": "TI / Informatica",
+    "delta_pp": -2.6737682283186146
+  }
+}

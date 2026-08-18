@@ -1,8 +1,10 @@
 # Dados
-data/
-*.csv
-*.parquet
-*.zip
+data/*
+!data/model_validation/
+data/model_validation/*
+!data/model_validation/*.parquet
+!data/model_validation/*.json
+!data/model_validation/*.csv
 
 # Python
 __pycache__/

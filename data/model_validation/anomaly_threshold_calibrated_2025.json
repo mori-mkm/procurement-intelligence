@@ -1,0 +1,9 @@
+{
+  "calibration_period": 2025,
+  "percentile": 95.0,
+  "known_only": true,
+  "threshold_abs_log_error": 3.284765668047421,
+  "multiplicative_factor": 26.70272627969831,
+  "test_period": 2026,
+  "recalibrated_on_test": false
+}

@@ -1,0 +1,15 @@
+{
+  "reference_model": "LightGBM_v0",
+  "challenger_model": "LightGBM_tuned",
+  "n_transacoes": 57452,
+  "n_clusters": 8338,
+  "reference_mae_log": 1.2142584300487158,
+  "challenger_mae_log": 1.2119655418153745,
+  "delta_mae_log": -0.0022928882333411085,
+  "relative_difference_pct": -0.1888303327034854,
+  "ci_low": -0.006059119586945455,
+  "ci_high": 0.0011777435292722508,
+  "confidence": 0.95,
+  "n_bootstrap": 5000,
+  "conclusion": "inconclusive"
+}
